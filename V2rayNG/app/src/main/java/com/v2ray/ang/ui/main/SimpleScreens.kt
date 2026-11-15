@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import com.v2ray.ang.handler.MmkvManager
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -525,6 +526,17 @@ private fun ConnectionTab(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         PowerButton(c = c, on = isRunning, busy = isStarting, enabled = !preparing, onClick = onToggle)
+        if (MmkvManager.decodeSettingsBool(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, false)) {
+            val code = MmkvManager.decodeSettingsString(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT).orEmpty()
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = stringResource(R.string.ui_shield_tunnel) + " \u00B7 " +
+                    if (code.isBlank()) stringResource(R.string.ui_shield_country_auto) else ShieldCountries.nameOf(code, java.util.Locale.getDefault()),
+                color = c.accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(12.dp).clip(CircleShape).background(dotColor))
@@ -633,7 +645,7 @@ private fun SpeedCard(c: UiColors, icon: Int, label: String, bytesPerSecond: Lon
 /** The big round power button with a purple-to-blue ring, as in the reference design. */
 @Composable
 private fun PowerButton(c: UiColors, on: Boolean, busy: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val ring = Brush.linearGradient(listOf(Color(0xFFC03DFF), Color(0xFF3D8BFF)))
+    val ring = Brush.linearGradient(listOf(Color(0xFF2ECC71), Color(0xFF1FA85A)))
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(250.dp)) {
         Box(Modifier.size(250.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.06f)))
         Box(Modifier.size(210.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.09f)))
@@ -657,7 +669,7 @@ private fun PowerButton(c: UiColors, on: Boolean, busy: Boolean, enabled: Boolea
                         painter = painterResource(R.drawable.ic_power_24dp),
                         contentDescription = null,
                         modifier = Modifier.size(72.dp),
-                        tint = Color.White,
+                        tint = if (on) Color(0xFF2ECC71) else Color.White,
                     )
                 }
             }
@@ -750,6 +762,21 @@ private fun ServersTab(
                 .verticalScroll(rememberScrollState())
                 .padding(8.dp),
         ) {
+            var shield by remember { mutableStateOf(MmkvManager.decodeSettingsBool(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, false)) }
+            var pickCountry by remember { mutableStateOf(false) }
+            if (pickCountry) {
+                ShieldCountryDialog(
+                    c = c,
+                    onDismiss = { pickCountry = false },
+                    onPick = { code ->
+                        pickCountry = false
+                        shield = true
+                        MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT, code)
+                        MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, true)
+                        onSelect(null)
+                    },
+                )
+            }
             if (servers.isEmpty()) {
                 Text(
                     text = stringResource(R.string.ui_servers_empty),
@@ -761,17 +788,31 @@ private fun ServersTab(
                 if (query.isBlank()) {
                     ServerRowItem(
                         colors = c,
+                        name = stringResource(R.string.ui_shield_tunnel),
+                        selected = shield,
+                        onClick = { pickCountry = true },
+                    )
+                    ServerRowItem(
+                        colors = c,
                         name = stringResource(R.string.ui_servers_auto),
-                        selected = !manualSelection,
-                        onClick = { onSelect(null) },
+                        selected = !manualSelection && !shield,
+                        onClick = {
+                            shield = false
+                            MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, false)
+                            onSelect(null)
+                        },
                     )
                 }
                 servers.filter { it.name.contains(query.trim(), ignoreCase = true) }.forEach { server ->
                     ServerRowItem(
                         colors = c,
                         name = server.name,
-                        selected = manualSelection && server.guid == selectedGuid,
-                        onClick = { onSelect(server.guid) },
+                        selected = manualSelection && !shield && server.guid == selectedGuid,
+                        onClick = {
+                            shield = false
+                            MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, false)
+                            onSelect(server.guid)
+                        },
                     )
                 }
             }
@@ -1145,4 +1186,29 @@ private fun CircleButton(
             content()
         }
     }
+}
+
+@Composable
+private fun ShieldCountryDialog(c: UiColors, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    val current = MmkvManager.decodeSettingsString(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT).orEmpty()
+    val countries = remember { ShieldCountries.all(java.util.Locale.getDefault()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ui_shield_country_title)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                ServerRowItem(
+                    colors = c,
+                    name = stringResource(R.string.ui_shield_country_auto),
+                    selected = current.isBlank(),
+                    onClick = { onPick("") },
+                )
+                countries.forEach { (code, name) ->
+                    ServerRowItem(colors = c, name = name, selected = code == current, onClick = { onPick(code) })
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } },
+    )
 }

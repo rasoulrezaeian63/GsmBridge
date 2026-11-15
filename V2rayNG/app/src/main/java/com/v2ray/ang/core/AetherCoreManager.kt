@@ -272,7 +272,7 @@ object AetherCoreManager {
      * [buildArguments]. Opens a socket to find one.
      */
     fun scanPort(profile: ProfileItem): Int =
-        if (AetherTor.fromString(profile.aetherTor) == AetherTor.REVERSE) Utils.findRandomFreePort() else 0
+        if (effectiveTor(profile) == AetherTor.REVERSE) Utils.findRandomFreePort() else 0
 
     /**
      * Whether a tunnel over MASQUE runs over HTTP/2: chosen so, or dialled through Tor or Psiphon around it, which carry
@@ -315,6 +315,13 @@ object AetherCoreManager {
      * own wherever the app looks options up word by word: a link carrying dns=--upstream would leave the core
      * without the upstream the app gives it, so that it dialled out around Xray.
      */
+    const val PREF_SHIELD_TUNNEL = "pref_shield_tunnel"
+    const val PREF_SHIELD_EXIT = "pref_shield_exit"
+
+    /** Shield Tunnel on: Tor only (with webtunnel bridges), whatever the profile says. */
+    fun effectiveTor(profile: ProfileItem): AetherTor =
+        if (MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false)) AetherTor.ONLY else AetherTor.fromString(profile.aetherTor)
+
     private fun settingValue(value: String?): String? = value?.trim()?.takeUnless { it.isEmpty() || it.startsWith('-') }
 
     fun buildArguments(
@@ -326,7 +333,7 @@ object AetherCoreManager {
         val protocol = AetherProtocol.fromString(profile.aetherProtocol)
         // A scan looks for WARP endpoints from where the session will look: a carrier around the tunnel
         // stays, since the session reaches WARP from its exit, while one inside the tunnel has no part in it.
-        val tor = AetherTor.fromString(profile.aetherTor).takeUnless { scan && it != AetherTor.REVERSE } ?: AetherTor.OFF
+        val tor = effectiveTor(profile).takeUnless { scan && it != AetherTor.REVERSE } ?: AetherTor.OFF
         val psiphon = AetherPsiphon.fromString(profile.aetherPsiphon).takeUnless { scan && it != AetherPsiphon.REVERSE } ?: AetherPsiphon.OFF
         // The listener the app dials takes [port]: Psiphon's or Tor's when one of them runs inside the
         // tunnel and is what the app reaches, the tunnel's own otherwise. Every other listener takes the
@@ -430,19 +437,27 @@ object AetherCoreManager {
                 // Told nothing, the core tries Tor plainly and turns to fetched bridges where Tor is blocked.
                 val bridges = AetherTorBridges.fromString(profile.aetherTorBridges)
                 when (bridges) {
-                    AetherTorBridges.AUTO -> Unit
-                    AetherTorBridges.FIRST -> add("--tor-bridges")
-                    AetherTorBridges.NEVER -> add("--no-tor-bridges")
+                    AetherTorBridges.AUTO, AetherTorBridges.FIRST, AetherTorBridges.NEVER -> {
+                        if (MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false)) {
+                            WebtunnelBridges.LINES.shuffled().take(12).forEach { addAll(listOf("--tor-bridge", it)) }
+                        } else when (bridges) {
+                            AetherTorBridges.FIRST -> add("--tor-bridges")
+                            AetherTorBridges.NEVER -> add("--no-tor-bridges")
+                            else -> Unit
+                        }
+                    }
                     AetherTorBridges.OWN -> AetherFmt.bridgeLines(profile.aetherTorBridgeLines)
                         .mapNotNull { settingValue(it) }
                         .forEach { addAll(listOf("--tor-bridge", it)) }
                 }
                 // Where fetched bridges come from; with the profile's own lines, or none at all, nothing is fetched.
-                if (bridges == AetherTorBridges.AUTO || bridges == AetherTorBridges.FIRST) {
+                if (!MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false) && (bridges == AetherTorBridges.AUTO || bridges == AetherTorBridges.FIRST)) {
                     AetherTorRelays.fromString(profile.aetherTorRelays).takeUnless { it == AetherTorRelays.AUTO }
                         ?.let { addAll(listOf("--tor-relays", it.type)) }
                 }
             }
+
+            if (tor != AetherTor.OFF) (settingValue(MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.takeIf { MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false) }) ?: settingValue(profile.aetherTorExit))?.let { addAll(listOf("--tor-exit", it)) }
 
             when (psiphon) {
                 AetherPsiphon.OFF -> Unit
@@ -983,7 +998,7 @@ object AetherCoreManager {
         val next = Session(
             core.port,
             arguments,
-            needsWord = readyNeedsWord(arguments) && showsInfo(arguments),
+            needsWord = readyNeedsWord(arguments) && (showsInfo(arguments) || aloneOf(arguments) == TOR_NAME),
             context = appContext,
             onExit = onExit,
         )
@@ -999,12 +1014,13 @@ object AetherCoreManager {
      */
     internal fun readyNeedsWord(arguments: List<String>): Boolean = when (aloneOf(arguments)) {
         PSIPHON_NAME -> true
-        TOR_NAME -> false
+        TOR_NAME -> MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false)
         else -> psiphonModeOf(arguments) == AetherPsiphon.CHAIN
     }
 
     /** True when [line] is the core's word that the listener the app dials carries traffic now. */
-    internal fun isReadyWord(line: String): Boolean = psiphonReady.containsMatchIn(line)
+    internal fun isReadyWord(line: String): Boolean =
+        psiphonReady.containsMatchIn(line) || line.contains("Bootstrapped 100%")
 
     /** True when [line] is the core's word that it stopped for want of an ECH key; see [noEchKey]. */
     internal fun isNoEchKeyWord(line: String): Boolean = noEchKey.containsMatchIn(line)
@@ -1665,15 +1681,73 @@ object AetherCoreManager {
         if (session !== target) return
         reapStale(context, listenerAddressOf(arguments))
         val process = try {
-            startProcess(context, arguments, markSession = true, exitKey = exitKey)
+            if (MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false) && "--tor-only" in arguments) {
+                startShieldTor(context, arguments)
+            } else {
+                startProcess(context, arguments, markSession = true, exitKey = exitKey)
+            }
         } catch (e: IOException) {
             LogUtil.e(AppConfig.TAG, "AetherCore: failed to launch the core", e)
+            target.chainEnd = "launch failed: ${e.message}".take(300)
             if (release(target)) target.onExit()
             return
         }
         target.process = process
         thread(name = "aether-core-output", isDaemon = true) { watch(target, process) }
     }
+
+    /** Shield Tunnel: classic Tor (libtor.so) over webtunnel bridges (libwebtunnel.so), serving SOCKS on the core's listener. */
+    private fun startShieldTor(context: Context, arguments: List<String>): Process {
+        val lib = context.applicationInfo.nativeLibraryDir
+        val tor = File(lib, "libtor.so")
+        val plugin = File(lib, "libwebtunnel.so")
+        if (!tor.exists() || !plugin.exists()) throw IOException("libtor.so/libwebtunnel.so missing in $lib: " + (File(lib).list()?.joinToString(",") ?: "?"))
+        val listener = listenerAddressOf(arguments) ?: "127.0.0.1:${DEFAULT_SHIELD_PORT}"
+        val dir = File(context.filesDir, "shield-tor").apply { mkdirs() }
+        val rc = File(dir, "torrc")
+        val bridges = WebtunnelBridges.LINES.shuffled().take(12)
+        rc.writeText(buildString {
+            appendLine("DataDirectory ${File(dir, "data").absolutePath}")
+            appendLine("RunAsDaemon 0")
+            appendLine("ClientOnly 1")
+            appendLine("AvoidDiskWrites 0")
+            appendLine("SocksPort $listener")
+            appendLine("SafeLogging 1")
+            appendLine("Log notice stdout")
+            appendLine("Log notice file ${File(dir, "tor.log").absolutePath}")
+            appendLine("CacheDirectory ${File(dir, "cache").absolutePath}")
+            appendLine("LearnCircuitBuildTimeout 1")
+            appendLine("CircuitBuildTimeout 30")
+            appendLine("KeepalivePeriod 60")
+            appendLine("FetchDirInfoEarly 1")
+            appendLine("FetchDirInfoExtraEarly 1")
+            appendLine("UseBridges 1")
+            appendLine("UpdateBridgesFromAuthority 0")
+            appendLine("AssumeReachable 1")
+            appendLine("ClientUseIPv6 0")
+            appendLine("ClientTransportPlugin webtunnel exec ${plugin.absolutePath}")
+            val exit = arguments.indexOf("--tor-exit").takeIf { it >= 0 }?.let { arguments.getOrNull(it + 1) }?.trim('{', '}')?.uppercase()
+            if (exit != null && Regex("[A-Z]{2}").matches(exit)) {
+                appendLine("ExitNodes {$exit}")
+                appendLine("StrictNodes 1")
+            }
+            bridges.forEach { appendLine("Bridge $it") }
+        })
+        File(dir, "data").mkdirs()
+        File(dir, "cache").mkdirs()
+        File(dir, "tor.log").delete()
+        val builder = ProcessBuilder(tor.absolutePath, "-f", rc.absolutePath, "--ignore-missing-torrc",
+            "--DataDirectory", File(dir, "data").absolutePath,
+            "--CacheDirectory", File(dir, "cache").absolutePath)
+            .directory(dir)
+            .redirectErrorStream(true)
+        builder.environment()["HOME"] = dir.absolutePath
+        builder.environment()["LD_LIBRARY_PATH"] = lib
+        builder.environment()["TMPDIR"] = context.cacheDir.absolutePath
+        return builder.start()
+    }
+
+    private const val DEFAULT_SHIELD_PORT = 1819
 
     private fun forward(process: Process, source: String, onOutput: (String) -> Unit, output: Channel<String>) {
         try {
@@ -1693,6 +1767,7 @@ object AetherCoreManager {
         try {
             process.inputStream.bufferedReader().forEachLine { line ->
                 relay(line, "aether")
+                if (line.isNotBlank()) target.lastLine = line.trim().takeLast(160)
                 if (!target.wordSeen && isReadyWord(line)) target.wordSeen = true
                 if (isNoEchKeyWord(line)) target.noEchKey = true
                 // A core the app stopped, or one a new start replaced, is no longer the session's to end.
@@ -1710,6 +1785,12 @@ object AetherCoreManager {
             LogUtil.d(AppConfig.TAG, "AetherCore: output closed: ${e.message}")
         }
         val exitCode = process.waitFor()
+        if (target.chainEnd == null && MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false) && "--tor-only" in target.arguments) {
+            val tail = try {
+                File(File(target.context.filesDir, "shield-tor"), "tor.log").readLines().takeLast(3).joinToString(" | ")
+            } catch (e: Exception) { "" }
+            target.chainEnd = "tor exit $exitCode: " + (tail.ifBlank { target.lastLine ?: "no output" }).takeLast(300)
+        }
         if (!release(target)) return
         reapOrphans(target.context)
         if (target.chainEnd != null) {
@@ -1750,6 +1831,9 @@ object AetherCoreManager {
         /** Whether the core said it stopped for want of an ECH key. */
         @Volatile
         var noEchKey: Boolean = false
+
+        @Volatile
+        var lastLine: String? = null
 
         /** The core's words that Tor or Psiphon inside the tunnel had ended, for which the app ended it; see [chainEndWords]. */
         @Volatile
