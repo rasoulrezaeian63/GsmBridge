@@ -1726,7 +1726,10 @@ object AetherCoreManager {
             appendLine("ClientUseIPv6 0")
             appendLine("ClientTransportPlugin webtunnel exec ${plugin.absolutePath}")
             val exit = arguments.indexOf("--tor-exit").takeIf { it >= 0 }?.let { arguments.getOrNull(it + 1) }?.trim('{', '}')?.uppercase()
-            if (exit != null && Regex("[A-Z]{2}").matches(exit)) {
+            if (geo == null) {
+                // Without geoip Tor cannot resolve {CC} and never builds circuits, so skip country rules.
+                appendLine("# geoip unavailable: ${geoError ?: "unknown"}")
+            } else if (exit != null && Regex("[A-Z]{2}").matches(exit)) {
                 appendLine("ExitNodes {$exit}")
                 appendLine("StrictNodes 1")
             } else {
@@ -1753,6 +1756,8 @@ object AetherCoreManager {
     private const val DEFAULT_SHIELD_PORT = 1819
 
     /** Tor's geoip files (needed for ExitNodes {CC}), unpacked from assets/tor like UAC does. */
+    @Volatile private var geoError: String? = null
+
     private fun installGeoIp(context: Context, dir: File): Pair<File, File>? = try {
         fun one(name: String): File {
             val out = File(dir, name)
@@ -1768,6 +1773,7 @@ object AetherCoreManager {
         one("geoip") to one("geoip6")
     } catch (e: Exception) {
         LogUtil.w(AppConfig.TAG, "AetherCore: geoip install failed", e)
+        geoError = e.toString()
         null
     }
 
