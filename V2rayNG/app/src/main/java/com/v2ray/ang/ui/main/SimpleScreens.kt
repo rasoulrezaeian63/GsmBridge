@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.CompositionLocalProvider
@@ -526,7 +527,7 @@ private fun ConnectionTab(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectTapGestures(onLongPress = {
+                detectTapGestures(onLongPress = {
                     val txt = try {
                         java.io.File(java.io.File(shareCtx.filesDir, "shield-tor"), "tor.log").readLines().takeLast(150).joinToString("\n")
                     } catch (e: Exception) { "no tor.log: " + e.message }
