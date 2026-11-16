@@ -1750,7 +1750,19 @@ object AetherCoreManager {
         builder.environment()["HOME"] = dir.absolutePath
         builder.environment()["LD_LIBRARY_PATH"] = lib
         builder.environment()["TMPDIR"] = context.cacheDir.absolutePath
-        return builder.start()
+        val started = builder.start()
+        // Fallback: the stdout line can be missed, so the log file is watched for the 100% line too.
+        val logFile = File(dir, "tor.log")
+        thread(name = "shield-tor-ready", isDaemon = true) {
+            while (started.isAlive && !torReady.value) {
+                try {
+                    val l = logFile.takeIf { it.exists() }?.readLines()?.lastOrNull { it.contains("Bootstrapped ") }
+                    if (l != null) trackTorStep(l)
+                } catch (_: Exception) {}
+                Thread.sleep(1000)
+            }
+        }
+        return started
     }
 
     private const val DEFAULT_SHIELD_PORT = 1819
