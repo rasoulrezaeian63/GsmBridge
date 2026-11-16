@@ -1731,7 +1731,7 @@ object AetherCoreManager {
             val exit = (MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.trim('{', '}')?.takeIf { it.length == 2 }
                 ?: arguments.indexOf("--tor-exit").takeIf { it >= 0 }?.let { arguments.getOrNull(it + 1) })
                 ?.trim('{', '}')?.uppercase()
-            LogUtil.w(AppConfig.TAG, "ShieldTor: exit country = ${exit ?: "smart"}")
+            LogUtil.w(AppConfig.TAG, "ShieldTor: exit country = ${exit ?: "smart"} geo=${if (geo != null) "ok" else "FAILED: $geoError"}")
             shieldWantedExit = null
             if (geo == null) {
                 // Without geoip Tor cannot resolve {CC} and never builds circuits, so skip country rules.
