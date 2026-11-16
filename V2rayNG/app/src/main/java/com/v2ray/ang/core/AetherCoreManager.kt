@@ -1065,7 +1065,7 @@ object AetherCoreManager {
     }
 
     suspend fun awaitListening(timeoutMs: Long): Boolean =
-        awaitReady(timeoutMs, READY_POLL_MS, { isRunning }, { session?.let { it.wordSeen && answersSocks(it.port) } == true })
+        awaitReady(timeoutMs, READY_POLL_MS, { isRunning }, { torReady.value || session?.let { it.wordSeen && answersSocks(it.port) } == true })
 
     internal suspend fun awaitReady(
         timeoutMs: Long,
@@ -1770,6 +1770,7 @@ object AetherCoreManager {
                 } catch (_: Exception) {}
                 Thread.sleep(1000)
             }
+            LogUtil.w(AppConfig.TAG, "ShieldTorControl: bootstrap done alive=${started.isAlive} ready=${torReady.value}")
             // Bootstrapped: confirm through ControlPort that the exit really is in the chosen country.
             if (started.isAlive && torReady.value) ShieldTorControl.verifyExit(File(dir, "data"), shieldWantedExit)
         }

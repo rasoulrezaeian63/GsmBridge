@@ -21,6 +21,7 @@ internal object ShieldTorControl {
     private const val MAX_ATTEMPTS = 5
 
     fun verifyExit(dir: File, wanted: String?) {
+        LogUtil.w(AppConfig.TAG, "ShieldTorControl: start, wanted=$wanted")
         if (wanted == null) return
         val cookie = File(dir, COOKIE_NAME)
         try {
@@ -38,6 +39,7 @@ internal object ShieldTorControl {
                         return
                     }
                     LogUtil.w(AppConfig.TAG, "ShieldTorControl: exit is ${actual ?: "unknown"}, want $wanted; NEWNYM (attempt $attempt)")
+                    s.closeBuiltCircuits()
                     s.command("SIGNAL NEWNYM")
                     Thread.sleep(3000)
                 }
@@ -78,6 +80,19 @@ internal object ShieldTorControl {
                 if (line.startsWith("250")) return out
                 throw IllegalStateException("control error: $line")
             }
+        }
+
+        /** Closes every built circuit so existing streams cannot keep the old exit. */
+        fun closeBuiltCircuits() {
+            val ids = command("GETINFO circuit-status")
+                .filter { " BUILT " in it }
+                .mapNotNull { it.trim().split(" ").firstOrNull()?.takeIf { id -> id.all(Char::isDigit) } }
+            for (id in ids) {
+                try { command("CLOSECIRCUIT $id") } catch (e: Exception) {
+                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: CLOSECIRCUIT $id failed: $e")
+                }
+            }
+            LogUtil.w(AppConfig.TAG, "ShieldTorControl: closed ${ids.size} circuits")
         }
 
         /** Country codes currently in GETCONF ExitNodes. */
