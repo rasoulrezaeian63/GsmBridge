@@ -200,6 +200,7 @@ class MainActivity : HelperBaseComponentActivity() {
             val info = remember(sub) {
                 sub.subscription.usageInfo?.let { buildSubscriptionInfoUiModel(it, System.currentTimeMillis()) }
             }
+            val torStepText by com.v2ray.ang.core.AetherCoreManager.torStep.collectAsStateWithLifecycle()
             var livePing by remember { mutableStateOf(0L) }
             LaunchedEffect(uiState.status) {
                 (uiState.status as? MainStatus.ConnectionTest)?.let { livePing = it.result.delayMillis }
@@ -211,7 +212,7 @@ class MainActivity : HelperBaseComponentActivity() {
                     while (livePing <= 0L && attempt < 6) {
                         kotlinx.coroutines.delay(if (attempt == 0) 2000L else 4000L)
                         if (!mainViewModel.uiState.value.isRunning) break
-                        mainViewModel.testCurrentServerRealPing()
+                        livePing = withContext(kotlinx.coroutines.Dispatchers.IO) { com.v2ray.ang.core.AetherCoreManager.torPing() }
                         attempt++
                         kotlinx.coroutines.delay(3000L)
                     }
@@ -227,7 +228,7 @@ class MainActivity : HelperBaseComponentActivity() {
                 info = info,
                 statusText = when {
                     scanning -> stringResource(R.string.ui_home_scanning)
-                    startingState.value && !uiState.isRunning -> stringResource(R.string.ui_home_preparing)
+                    startingState.value && !uiState.isRunning -> torStepText.ifBlank { stringResource(R.string.ui_home_preparing) }
                     else -> statusText
                 },
                 isStarting = startingState.value && !uiState.isRunning,

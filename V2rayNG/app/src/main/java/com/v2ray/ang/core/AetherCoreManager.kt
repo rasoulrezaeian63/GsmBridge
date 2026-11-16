@@ -1779,9 +1779,33 @@ object AetherCoreManager {
         }
     }
 
+    /** Latest Tor start-up step, shown under the connect button. */
+    val torStep = kotlinx.coroutines.flow.MutableStateFlow("")
+
+    private fun trackTorStep(line: String) {
+        val m = Regex("Bootstrapped (\\d+)%[^:]*: (.*)").find(line)
+        if (m != null) { torStep.value = "Tor ${m.groupValues[1]}% - ${m.groupValues[2].trim()}"; return }
+        when {
+            line.contains("webtunnel", true) && line.contains("bridge", true) -> torStep.value = "Checking webtunnel bridges…"
+            line.contains("Opening Socks listener") -> torStep.value = "Starting Tor…"
+        }
+    }
+
+    /** Real latency through Tor's SOCKS port, in ms (0 on failure). */
+    fun torPing(): Long = try {
+        val proxy = java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", DEFAULT_SHIELD_PORT))
+        val t = System.currentTimeMillis()
+        val c = java.net.URL("https://www.gstatic.com/generate_204").openConnection(proxy) as java.net.HttpURLConnection
+        c.connectTimeout = 15000; c.readTimeout = 15000
+        c.responseCode
+        c.disconnect()
+        System.currentTimeMillis() - t
+    } catch (e: Exception) { 0L }
+
     private fun watch(target: Session, process: Process) {
         try {
             process.inputStream.bufferedReader().forEachLine { line ->
+                trackTorStep(line)
                 relay(line, "aether")
                 if (line.isNotBlank()) target.lastLine = line.trim().takeLast(160)
                 if (!target.wordSeen && isReadyWord(line)) target.wordSeen = true

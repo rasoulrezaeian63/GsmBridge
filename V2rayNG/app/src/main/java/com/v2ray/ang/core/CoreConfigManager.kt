@@ -56,7 +56,11 @@ object CoreConfigManager {
             val secondaryPort = AetherCoreManager.secondarySocksPort
             val torOnlyCore = if (MmkvManager.decodeSettingsBool(AetherCoreManager.PREF_SHIELD_TUNNEL, true) &&
                 (dependency as? AetherDependency.Single)?.core == null
-            ) AetherCore(listOf("--tor-only", "--tor-bind", "127.0.0.1:$TOR_SOCKS_PORT")) else null
+            ) AetherCore(
+                listOf("--tor-only", "--tor-bind", "127.0.0.1:$TOR_SOCKS_PORT") +
+                    (MmkvManager.decodeSettingsString(AetherCoreManager.PREF_SHIELD_EXIT)?.trim()?.takeIf { it.length == 2 }
+                        ?.let { listOf("--tor-exit", "{${it.uppercase()}}") } ?: emptyList())
+            ) else null
             val core = torOnlyCore ?: (dependency as? AetherDependency.Single)?.core?.let {
                 if (lacksChainHop(it, v2rayConfig.outbounds)) return chainHopFailure(context, guid)
                 // The profile named as the exit-node is looked up once, so that the check and the outbound go by one answer.
