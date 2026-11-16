@@ -1684,7 +1684,7 @@ object AetherCoreManager {
         val plugin = File(lib, "libwebtunnel.so")
         if (!tor.exists() || !plugin.exists()) throw IOException("libtor.so/libwebtunnel.so missing in $lib: " + (File(lib).list()?.joinToString(",") ?: "?"))
         torReady.value = false
-        torStep.value = "Starting Tor…"
+        torStep.value = "Starting GsmBridge…"
         val listener = listenerAddressOf(arguments) ?: "127.0.0.1:${DEFAULT_SHIELD_PORT}"
         val dir = File(context.filesDir, "shield-tor").apply { mkdirs() }
         val rc = File(dir, "torrc")
@@ -1729,6 +1729,10 @@ object AetherCoreManager {
             if (exit != null && Regex("[A-Z]{2}").matches(exit)) {
                 appendLine("ExitNodes {$exit}")
                 appendLine("StrictNodes 1")
+            } else {
+                // Smart Connect: prefer exits in fast, well-connected countries; Tor picks the best by bandwidth; falls back to any exit.
+                appendLine("ExitNodes " + listOf("DE", "NL", "SE", "CH", "FR", "AT", "FI", "NO", "GB", "US", "CA", "RO").joinToString(",") { "{$it}" })
+                appendLine("StrictNodes 0")
             }
             bridges.forEach { appendLine("Bridge $it") }
         })
@@ -1788,10 +1792,10 @@ object AetherCoreManager {
     private fun trackTorStep(line: String) {
         val m = Regex("Bootstrapped (\\d+)%[^:]*: (.*)").find(line)
         if (m != null && m.groupValues[1] == "100") torReady.value = true
-        if (m != null) { torStep.value = "Tor ${m.groupValues[1]}% - ${m.groupValues[2].trim()}"; return }
+        if (m != null) { torStep.value = "GsmBridge ${m.groupValues[1]}% - ${m.groupValues[2].trim()}"; return }
         when {
             line.contains("webtunnel", true) && line.contains("bridge", true) -> torStep.value = "Checking webtunnel bridges…"
-            line.contains("Opening Socks listener") -> torStep.value = "Starting Tor…"
+            line.contains("Opening Socks listener") -> torStep.value = "Starting GsmBridge…"
         }
     }
 

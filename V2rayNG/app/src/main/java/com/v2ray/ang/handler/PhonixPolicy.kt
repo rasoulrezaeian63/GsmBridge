@@ -255,7 +255,22 @@ object PhonixPolicy {
 
     /** Selects the server the person chose by hand, else one at random. */
     fun applySelection() {
-        (manualServerGuid() ?: randomServer())?.let { MmkvManager.setSelectServer(it) }
+        MmkvManager.setSelectServer(ensureTorProfile())
+    }
+
+    private const val PREF_TOR_PROFILE = "gsmbridge_tor_profile"
+
+    /** GsmBridge: one local profile (SOCKS to Tor 127.0.0.1:1819); the connection always goes through it. */
+    fun ensureTorProfile(): String {
+        val saved = MmkvManager.decodeSettingsString(PREF_TOR_PROFILE)
+        if (!saved.isNullOrEmpty() && MmkvManager.decodeServerConfig(saved) != null) return saved
+        val profile = ProfileItem.create(EConfigType.SOCKS)
+        profile.remarks = "GsmBridge Tor"
+        profile.server = "127.0.0.1"
+        profile.serverPort = "1819"
+        val guid = MmkvManager.encodeServerConfig("", profile)
+        MmkvManager.encodeSettings(PREF_TOR_PROFILE, guid)
+        return guid
     }
 
     /** A server at random among the candidates, those keyed in [exclude] left out. */
@@ -267,16 +282,7 @@ object PhonixPolicy {
      * itself, which on its own goes nowhere past the tunnel.
      */
     fun ensureServerSelected() {
-        val candidates = serverCandidates()
-        if (candidates.isEmpty()) return
-        val selected = MmkvManager.getSelectServer()
-        val manual = manualServerGuid()
-        if (manual != null) {
-            if (selected != manual) MmkvManager.setSelectServer(manual)
-            return
-        }
-        if (selected != null && candidates.any { it.first == selected }) return
-        randomServer()?.let { MmkvManager.setSelectServer(it) }
+        MmkvManager.setSelectServer(ensureTorProfile())
     }
 
     /**

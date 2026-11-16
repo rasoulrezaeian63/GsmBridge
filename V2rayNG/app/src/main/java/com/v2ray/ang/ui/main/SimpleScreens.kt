@@ -99,16 +99,16 @@ internal class UiColors(
 
 @Composable
 internal fun uiColors(): UiColors = UiColors(
-    background = Color(0xFFE9ECFB),
-    backgroundTop = Color(0xFFFFFFFF),
-    card = Color(0xFFFFFFFF),
-    inner = Color(0xFFDCE0F5),
-    field = Color(0xFFEEF0FB),
-    text = Color(0xFF1B1B3A),
-    subText = Color(0xFF6B6F8F),
-    accent = Color(0xFF7B3DFF),
-    idle = Color(0xFF9AA0C0),
-    danger = Color(0xFFE5384D),
+    background = Color(0xFF06140F),
+    backgroundTop = Color(0xFF0B2A1F),
+    card = Color(0xFF12281F),
+    inner = Color(0xFF1C3A2E),
+    field = Color(0xFF16322A),
+    text = Color(0xFFE8F5EE),
+    subText = Color(0xFF8FB3A2),
+    accent = Color(0xFF2EE59D),
+    idle = Color(0xFF5E7F70),
+    danger = Color(0xFFFF5C6C),
 )
 
 internal fun Modifier.phonixBackground(c: UiColors): Modifier =
@@ -229,13 +229,13 @@ fun KeyEntryScreen(
             shape = RoundedCornerShape(28.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = c.accent,
-                contentColor = Color.White,
+                contentColor = Color(0xFF06140F),
                 disabledContainerColor = c.accent.copy(alpha = 0.6f),
-                disabledContentColor = Color.White,
+                disabledContentColor = Color(0xFF06140F),
             ),
         ) {
             if (isLoading) {
-                CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                CircularProgressIndicator(Modifier.size(22.dp), color = Color(0xFF06140F), strokeWidth = 2.dp)
             } else {
                 Text(
                     text = stringResource(R.string.ui_key_activate),
@@ -318,7 +318,7 @@ private suspend fun requestFreeTest(ctx: Context): Triple<String?, Boolean, Stri
     }
 
 /** The pages of the second screen, the icons of the bar at the bottom. */
-internal enum class HomeTab { HOME, SERVERS, PROFILE, MENU }
+internal enum class HomeTab { HOME, SERVERS }
 
 /**
  * Second screen, in the look of the reference design: the connection with its speeds and the power switch, the
@@ -361,6 +361,9 @@ internal fun SimpleHomeScreen(
     var showEnded by rememberSaveable { mutableStateOf(false) }
     // Shown when the subscription ends; removed by itself once it is renewed (ended turns false)
     LaunchedEffect(ended) { showEnded = ended }
+    androidx.activity.compose.BackHandler(enabled = tabIndex != 0) { tabIndex = 0 }
+    // the subscription info is refreshed once a day while the app is open
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(24L * 60 * 60 * 1000); onUpdate() } }
     val drawerState = androidx.compose.material3.rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -390,8 +393,8 @@ internal fun SimpleHomeScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                Text("\u2630", color = c.text, fontSize = 26.sp)
+            IconButton(onClick = { if (tabIndex == 0) scope.launch { drawerState.open() } else tabIndex = 0 }) {
+                Text(if (tabIndex == 0) "\u2630" else "\u2190", color = c.text, fontSize = 26.sp)
             }
             Spacer(Modifier.weight(1f))
         }
@@ -407,9 +410,11 @@ internal fun SimpleHomeScreen(
                     ended = ended,
                     downloadSpeed = downloadSpeed,
                     uploadSpeed = uploadSpeed,
-                    locationLabel = stringResource(if (manualSelection) R.string.ui_servers_manual else R.string.ui_servers_auto),
+                    locationLabel = if (MmkvManager.decodeSettingsString(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT).isNullOrBlank()) "" else "",
                     locationName = MmkvManager.decodeSettingsString(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT)?.takeIf { it.isNotBlank() }?.let { flagOf(it) + " " + ShieldCountries.nameOf(it, java.util.Locale.getDefault()) } ?: stringResource(R.string.ui_servers_auto),
                     pingMs = pingMs,
+                    subTitle = title,
+                    info = info,
                     onToggle = {
                         // Ended and not renewed: show the popup again, never connect
                         if (ended && !isRunning) showEnded = true else onToggle()
@@ -428,19 +433,8 @@ internal fun SimpleHomeScreen(
                     },
                 )
 
-                HomeTab.PROFILE -> ProfileTab(
-                    c = c,
-                    title = title,
-                    info = info,
-                    ended = ended,
-                    isUpdating = isUpdating,
-                    onUpdate = onUpdate,
-                )
-
-                HomeTab.MENU -> Unit
             }
         }
-        BottomNav(c = c, selected = tab, onSelect = { tabIndex = it.ordinal })
     }
     }
 
@@ -501,6 +495,8 @@ private fun ConnectionTab(
     locationLabel: String,
     locationName: String,
     pingMs: Long,
+    subTitle: String,
+    info: SubscriptionInfoUiModel?,
     onToggle: () -> Unit,
     onOpenServers: () -> Unit,
 ) {
@@ -566,7 +562,7 @@ private fun ConnectionTab(
                 ) { Text("\uD83C\uDF10", fontSize = 20.sp) }
                 Spacer(Modifier.size(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(text = locationLabel, color = c.subText, fontSize = 12.sp)
+                    if (locationLabel.isNotEmpty()) Text(text = locationLabel, color = c.subText, fontSize = 12.sp)
                     Text(
                         text = locationName,
                         color = c.text,
@@ -583,20 +579,38 @@ private fun ConnectionTab(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
-                .background(Color(0xFFD9F5E3))
+                .background(Color(0xFF1C3A2E))
                 .padding(horizontal = 26.dp, vertical = 8.dp),
         ) {
             Text(
                 text = "\u26A1  " + if (pingMs > 0L) "$pingMs ms" else "\u2014 ms",
-                color = Color(0xFF14532D),
+                color = c.accent,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
         Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            SpeedCard(c, R.drawable.ic_arrow_up_24dp, stringResource(R.string.ui_home_upload), uploadSpeed, Modifier.weight(1f))
-            SpeedCard(c, R.drawable.ic_arrow_down_24dp, stringResource(R.string.ui_home_download), downloadSpeed, Modifier.weight(1f))
+        val daysLeft = info?.expireMillis?.let { kotlin.math.ceil((it - System.currentTimeMillis()) / 86_400_000.0).toInt().coerceAtLeast(0) }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = c.card,
+        ) {
+            Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(text = stringResource(R.string.ui_profile_remaining), color = c.subText, fontSize = 12.sp)
+                    Text(
+                        text = subTitle.ifBlank { "GsmBridge" },
+                        color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = if (daysLeft != null) stringResource(R.string.ui_profile_days_left, daysLeft) else "\u221E",
+                    color = if (daysLeft == 0) c.danger else c.accent,
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                )
+            }
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -925,37 +939,6 @@ private fun MenuTab(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = stringResource(R.string.ui_nav_menu),
-            color = c.text,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-        )
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .clickable(enabled = !isScanning && !preparing, onClick = onGetNewIp),
-            shape = RoundedCornerShape(24.dp),
-            color = c.card,
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (isScanning) {
-                    CircularProgressIndicator(Modifier.size(20.dp), color = c.accent, strokeWidth = 2.dp)
-                    Spacer(Modifier.size(12.dp))
-                }
-                Text(
-                    text = stringResource(if (isScanning) R.string.ui_home_scanning else R.string.ui_home_get_new_ip),
-                    color = if (preparing) c.subText else c.text,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-        val menuContext = androidx.compose.ui.platform.LocalContext.current
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
@@ -982,32 +965,6 @@ private fun MenuTab(
                     }
                 }
             }
-        }
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .clickable {
-                    try {
-                        menuContext.startActivity(
-                            android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://netlixy.ir/dl/GsmShield.apk")
-                            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
-                    } catch (_: Exception) {
-                    }
-                },
-            shape = RoundedCornerShape(24.dp),
-            color = c.card,
-        ) {
-            Text(
-                text = stringResource(R.string.ui_menu_update_app),
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
-                color = c.text,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
         }
         Surface(
             modifier = Modifier
@@ -1042,48 +999,6 @@ private fun MenuTab(
                     Text(stringResource(R.string.ui_cancel))
                 }
             },
-        )
-    }
-}
-
-@Composable
-private fun BottomNav(c: UiColors, selected: HomeTab, onSelect: (HomeTab) -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        shape = RoundedCornerShape(26.dp),
-        color = c.card,
-        border = BorderStroke(1.dp, c.idle.copy(alpha = 0.25f)),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            NavItem(c, R.drawable.ic_nav_home, R.string.ui_nav_home, selected == HomeTab.HOME) { onSelect(HomeTab.HOME) }
-            NavItem(c, R.drawable.ic_nav_profile, R.string.ui_nav_profile, selected == HomeTab.PROFILE) { onSelect(HomeTab.PROFILE) }
-        }
-    }
-}
-
-@Composable
-private fun NavItem(c: UiColors, icon: Int, label: Int, selected: Boolean, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(
-            painter = painterResource(icon),
-            contentDescription = stringResource(label),
-            modifier = Modifier.size(26.dp),
-            tint = if (selected) c.accent else c.idle,
-        )
-        Text(
-            text = stringResource(label),
-            color = if (selected) c.accent else c.idle,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
         )
     }
 }

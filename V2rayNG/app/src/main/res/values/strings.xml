@@ -834,7 +834,7 @@
     <string name="ui_setup_failed">Setup did not finish. Update the subscription and try again.</string>
 
     <string name="ui_servers_title">Servers</string>
-    <string name="ui_servers_auto">Automatic (random)</string>
+    <string name="ui_servers_auto">Smart Connect</string>
     <string name="ui_servers_test">Test ping</string>
     <string name="ui_servers_testing">Testing…</string>
     <string name="ui_servers_timeout">Failed</string>
@@ -867,7 +867,7 @@
     <string name="ui_profile_remaining">Remaining</string>
     <string name="ui_profile_days_left">%1$d days left</string>
     <string name="ui_ended_title">Warning</string>
-    <string name="ui_free_button">Receive 10 GB free subscription</string>
+    <string name="ui_free_button">Receive 7 days free subscription</string>
     <string name="ui_free_fetching">Getting your key, this may take a while…</string>
     <string name="ui_free_again">You already received a free key on this device.</string>
     <string name="ui_free_error">Could not get the key. Check your connection and try again.</string>

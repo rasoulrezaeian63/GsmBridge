@@ -247,8 +247,7 @@ class MainActivity : HelperBaseComponentActivity() {
                 isPersian = isPersian,
                 onSelectServer = { guid ->
                     // null gives the pick back to the lowest delay; a key is a server chosen by hand
-                    PhonixPolicy.setManualServerName(guid?.let { key -> servers.firstOrNull { it.guid == key }?.name })
-                    (guid ?: PhonixPolicy.randomServer())?.let { setSelectServer(it) }
+                    setSelectServer(PhonixPolicy.ensureTorProfile())
                     // a new Tor exit country needs a fresh Tor
                     if (uiState.isRunning) LauncherManager.restartService(this@MainActivity)
                     serversRevision++
@@ -378,10 +377,7 @@ class MainActivity : HelperBaseComponentActivity() {
     }
 
     private fun startV2Ray() {
-        if (mainViewModel.uiState.value.selectedGuid.isNullOrEmpty()) {
-            toast(R.string.title_file_chooser)
-            return
-        }
+        PhonixPolicy.applySelection()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN
         ) {
             checkAndRequestPermission(PermissionType.ACCESS_LOCAL_NETWORK) {}
