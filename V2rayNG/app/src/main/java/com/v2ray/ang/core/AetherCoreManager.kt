@@ -1711,6 +1711,8 @@ object AetherCoreManager {
             appendLine("ClientOnly 1")
             appendLine("AvoidDiskWrites 0")
             appendLine("SocksPort $listener")
+            appendLine("ControlPort 127.0.0.1:${ShieldTorControl.CONTROL_PORT}")
+            appendLine("CookieAuthentication 1")
             appendLine("SafeLogging 1")
             appendLine("Log notice stdout")
             appendLine("Log notice file ${File(dir, "tor.log").absolutePath}")
@@ -1725,14 +1727,21 @@ object AetherCoreManager {
             appendLine("AssumeReachable 1")
             appendLine("ClientUseIPv6 0")
             appendLine("ClientTransportPlugin webtunnel exec ${plugin.absolutePath}")
-            val exit = arguments.indexOf("--tor-exit").takeIf { it >= 0 }?.let { arguments.getOrNull(it + 1) }?.trim('{', '}')?.uppercase()
+            // The saved choice is read here directly (settings are shared across processes), so a stale launch config can never override it.
+            val exit = (MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.trim('{', '}')?.takeIf { it.length == 2 }
+                ?: arguments.indexOf("--tor-exit").takeIf { it >= 0 }?.let { arguments.getOrNull(it + 1) })
+                ?.trim('{', '}')?.uppercase()
+            LogUtil.w(AppConfig.TAG, "ShieldTor: exit country = ${exit ?: "smart"}")
+            shieldWantedExit = null
             if (geo == null) {
                 // Without geoip Tor cannot resolve {CC} and never builds circuits, so skip country rules.
                 appendLine("# geoip unavailable: ${geoError ?: "unknown"}")
             } else if (exit != null && Regex("[A-Z]{2}").matches(exit)) {
+                shieldWantedExit = exit
                 appendLine("ExitNodes {$exit}")
                 appendLine("StrictNodes 1")
             } else {
+                shieldWantedExit = null
                 // Smart Connect: prefer exits in fast, well-connected countries; Tor picks the best by bandwidth; falls back to any exit.
                 appendLine("ExitNodes " + listOf("DE", "NL", "SE", "CH", "FR", "AT", "FI", "NO", "GB", "US", "CA", "RO").joinToString(",") { "{$it}" })
                 appendLine("StrictNodes 0")
@@ -1761,6 +1770,8 @@ object AetherCoreManager {
                 } catch (_: Exception) {}
                 Thread.sleep(1000)
             }
+            // Bootstrapped: confirm through ControlPort that the exit really is in the chosen country.
+            if (started.isAlive && torReady.value) ShieldTorControl.verifyExit(File(dir, "data"), shieldWantedExit)
         }
         return started
     }
@@ -1769,11 +1780,13 @@ object AetherCoreManager {
 
     /** Tor's geoip files (needed for ExitNodes {CC}), unpacked from assets/tor like UAC does. */
     @Volatile private var geoError: String? = null
+    @Volatile private var shieldWantedExit: String? = null
 
     private fun installGeoIp(context: Context, dir: File): Pair<File, File>? = try {
         fun one(name: String): File {
             val out = File(dir, name)
-            if (!out.isFile || out.length() < 100_000) {
+            // Always re-extract: a previously unpacked (stale) database must not survive an app update.
+            run {
                 val tmp = File(dir, "$name.tmp")
                 context.assets.open("tor/$name.gz").use { i ->
                     java.util.zip.GZIPInputStream(i).use { g -> tmp.outputStream().use { g.copyTo(it) } }
