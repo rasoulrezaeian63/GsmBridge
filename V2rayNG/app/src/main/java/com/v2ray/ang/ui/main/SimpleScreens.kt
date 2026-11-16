@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.AlertDialog
 import kotlinx.coroutines.launch
@@ -521,7 +522,20 @@ private fun ConnectionTab(
     ) {
         PowerButton(c = c, on = isRunning, busy = isStarting, enabled = !preparing, onClick = onToggle)
         Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        val shareCtx = androidx.compose.ui.platform.LocalContext.current
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.pointerInput(Unit) {
+                androidx.compose.foundation.gestures.detectTapGestures(onLongPress = {
+                    val txt = try {
+                        java.io.File(java.io.File(shareCtx.filesDir, "shield-tor"), "tor.log").readLines().takeLast(150).joinToString("\n")
+                    } catch (e: Exception) { "no tor.log: " + e.message }
+                    val i = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_TEXT, txt)
+                    shareCtx.startActivity(android.content.Intent.createChooser(i, "log").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                })
+            },
+        ) {
             Box(Modifier.size(12.dp).clip(CircleShape).background(dotColor))
             Spacer(Modifier.size(8.dp))
             Text(
@@ -576,18 +590,9 @@ private fun ConnectionTab(
             }
         }
         Spacer(Modifier.height(12.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(Color(0xFF1C3A2E))
-                .padding(horizontal = 26.dp, vertical = 8.dp),
-        ) {
-            Text(
-                text = "\u26A1  " + if (pingMs > 0L) "$pingMs ms" else "\u2014 ms",
-                color = c.accent,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-            )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SpeedCard(c, R.drawable.ic_arrow_down_24dp, "Download", downloadSpeed, Modifier.weight(1f))
+            SpeedCard(c, R.drawable.ic_arrow_up_24dp, "Upload", uploadSpeed, Modifier.weight(1f))
         }
         Spacer(Modifier.height(16.dp))
         val daysLeft = info?.expireMillis?.let { kotlin.math.ceil((it - System.currentTimeMillis()) / 86_400_000.0).toInt().coerceAtLeast(0) }
@@ -600,7 +605,7 @@ private fun ConnectionTab(
                 Column(Modifier.weight(1f)) {
                     Text(text = stringResource(R.string.ui_profile_remaining), color = c.subText, fontSize = 12.sp)
                     Text(
-                        text = subTitle.ifBlank { "GsmBridge" },
+                        text = subTitle.takeUnless { it.isBlank() || it.contains("Phonix", true) } ?: "GsmBridge",
                         color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
@@ -609,6 +614,44 @@ private fun ConnectionTab(
                     text = if (daysLeft != null) stringResource(R.string.ui_profile_days_left, daysLeft) else "\u221E",
                     color = if (daysLeft == 0) c.danger else c.accent,
                     fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        var showIp by remember { mutableStateOf(false) }
+        var ipInfo by remember { mutableStateOf("") }
+        LaunchedEffect(showIp, isRunning) {
+            if (showIp && isRunning) {
+                ipInfo = "..."
+                ipInfo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        val px = java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", 1819))
+                        val con = java.net.URL("http://ip-api.com/line/?fields=country,city,isp,query").openConnection(px) as java.net.HttpURLConnection
+                        con.connectTimeout = 10000; con.readTimeout = 10000
+                        val t = con.inputStream.bufferedReader().readText().trim().lines()
+                        if (t.size >= 4) "IP: ${t[3]}\n${t[0]} - ${t[1]}\n${t[2]}" else t.joinToString("\n")
+                    } catch (e: Exception) { "—" }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Surface(
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).clickable { showIp = !showIp },
+                shape = RoundedCornerShape(24.dp), color = c.card,
+            ) {
+                Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(locationName, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (showIp) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(if (isRunning) ipInfo else "—", color = c.subText, fontSize = 12.sp)
+                    }
+                }
+            }
+            Surface(shape = RoundedCornerShape(24.dp), color = c.card) {
+                Text(
+                    text = "\u26A1 " + if (pingMs > 0L) "$pingMs ms" else "\u2014 ms",
+                    color = c.accent, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                 )
             }
         }
