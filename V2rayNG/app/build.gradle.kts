@@ -10,7 +10,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.gsmshield.vpn"
+        applicationId = "com.gsmbridge.vpn"
         minSdk = 29
         targetSdk = 37
         versionCode = 754

@@ -81,8 +81,6 @@ object PhonixProvisioner {
 
     /** Asks for a run, in the background. */
     fun kick() {
-        // GsmBridge: no MASQUE profile is created any more
-        if (true) { setupFlow.value = Setup.READY; return }
         if (needsSetup()) setupFlow.value = Setup.PREPARING
         again.set(true)
         if (!running.compareAndSet(false, true)) return
@@ -113,7 +111,6 @@ object PhonixProvisioner {
      * connection goes out through another server. Nothing is tested, so nothing waits.
      */
     suspend fun prepareStart(context: Context) {
-        if (true) return
         PhonixPolicy.ensureChainForAllSubs()
         PhonixPolicy.applySelection()
     }
@@ -126,7 +123,6 @@ object PhonixProvisioner {
      * It does not run while a setup runs, nor while an Aether session is live: a scan must not disturb its tunnel.
      */
     suspend fun rescanEndpoint(context: Context): RescanResult {
-        if (true) return RescanResult.NO_PROFILE
         if (!busy.tryLock()) return RescanResult.BUSY
         try {
             if (!PhonixPolicy.ensureAetherProfile()) return RescanResult.NO_PROFILE

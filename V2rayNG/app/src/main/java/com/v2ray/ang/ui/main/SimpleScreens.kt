@@ -526,17 +526,6 @@ private fun ConnectionTab(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         PowerButton(c = c, on = isRunning, busy = isStarting, enabled = !preparing, onClick = onToggle)
-        if (MmkvManager.decodeSettingsBool(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, true)) {
-            val code = MmkvManager.decodeSettingsString(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT).orEmpty()
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = stringResource(R.string.ui_shield_tunnel) + " \u00B7 " +
-                    if (code.isBlank()) stringResource(R.string.ui_shield_country_auto) else ShieldCountries.nameOf(code, java.util.Locale.getDefault()),
-                color = c.accent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
         Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(12.dp).clip(CircleShape).background(dotColor))
