@@ -1687,7 +1687,23 @@ object AetherCoreManager {
         val dir = File(context.filesDir, "shield-tor").apply { mkdirs() }
         val rc = File(dir, "torrc")
         val bridges = WebtunnelBridges.LINES.shuffled().take(12)
+        val geo = installGeoIp(context, File(context.filesDir, "tor").apply { mkdirs() })
         rc.writeText(buildString {
+            if (geo != null) {
+                appendLine("GeoIPFile ${geo.first.absolutePath}")
+                appendLine("GeoIPv6File ${geo.second.absolutePath}")
+            }
+            appendLine("DormantCanceledByStartup 1")
+            appendLine("DormantClientTimeout 20 minutes")
+            appendLine("ConfluxEnabled 1")
+            appendLine("ReducedConnectionPadding 1")
+            appendLine("FetchUselessDescriptors 0")
+            appendLine("DownloadExtraInfo 0")
+            if (bridges.size >= 2) {
+                appendLine("NumEntryGuards 2")
+                appendLine("NumPrimaryGuards 2")
+                appendLine("ConfluxClientUX throughput")
+            }
             appendLine("DataDirectory ${File(dir, "data").absolutePath}")
             appendLine("RunAsDaemon 0")
             appendLine("ClientOnly 1")
@@ -1729,6 +1745,25 @@ object AetherCoreManager {
     }
 
     private const val DEFAULT_SHIELD_PORT = 1819
+
+    /** Tor's geoip files (needed for ExitNodes {CC}), unpacked from assets/tor like UAC does. */
+    private fun installGeoIp(context: Context, dir: File): Pair<File, File>? = try {
+        fun one(name: String): File {
+            val out = File(dir, name)
+            if (!out.isFile || out.length() < 100_000) {
+                val tmp = File(dir, "$name.tmp")
+                context.assets.open("tor/$name.gz").use { i ->
+                    java.util.zip.GZIPInputStream(i).use { g -> tmp.outputStream().use { g.copyTo(it) } }
+                }
+                out.delete(); tmp.renameTo(out)
+            }
+            return out
+        }
+        one("geoip") to one("geoip6")
+    } catch (e: Exception) {
+        LogUtil.w(AppConfig.TAG, "AetherCore: geoip install failed", e)
+        null
+    }
 
     private fun forward(process: Process, source: String, onOutput: (String) -> Unit, output: Channel<String>) {
         try {

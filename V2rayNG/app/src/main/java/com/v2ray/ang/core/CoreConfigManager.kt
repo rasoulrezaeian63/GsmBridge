@@ -412,6 +412,8 @@ object CoreConfigManager {
      * here, becomes the core's exit-node by its tag alone, see [routeAetherThroughXray]. A second chain
      * whose Aether hop dials out through the same hops leaves its own copy of that hop under its tag.
      */
+    private const val TOR_SOCKS_PORT = 1819
+
     private fun handleProxyChainResolvedOutbound(
         resolvedOutbound: CoreConfigContext.ResolvedOutbound,
         prepend: Boolean,
@@ -426,7 +428,21 @@ object CoreConfigManager {
         val shieldAether = if (shieldOn) fullChain.indexOfFirst { it.first.configType == EConfigType.AETHER } else -1
         // Shield: traffic leaves from Tor itself, so the subscription server after the Aether hop is dropped
         val chain = if (shieldAether >= 0) fullChain.take(shieldAether + 1) else fullChain
-        val chainOutbounds = chain.map { it.second }.toMutableList()
+        val chainOutbounds = if (shieldOn && shieldAether < 0) {
+            // GsmBridge: Tor-only. No subscription server is ever used; every route goes to local Tor SOCKS.
+            mutableListOf(
+                V2rayConfig.OutboundBean(
+                    tag = resolvedOutbound.tag,
+                    protocol = "socks",
+                    settings = V2rayConfig.OutboundBean.OutSettingsBean(
+                        address = AppConfig.LOOPBACK,
+                        port = TOR_SOCKS_PORT,
+                    ),
+                )
+            )
+        } else {
+            chain.map { it.second }.toMutableList()
+        }
         if (chainOutbounds.size == 1) {
             val outbound = chainOutbounds.first()
             outbound.tag = resolvedOutbound.tag
