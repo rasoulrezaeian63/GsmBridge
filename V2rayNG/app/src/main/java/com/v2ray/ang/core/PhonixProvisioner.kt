@@ -143,6 +143,7 @@ object PhonixProvisioner {
     }
 
     private suspend fun setup(context: Context): Boolean {
+        if (true) return false
         val subs = PhonixPolicy.allowedSubs()
         if (subs.isEmpty()) return false
 
@@ -223,6 +224,7 @@ object PhonixProvisioner {
 
     /** Registers the WARP keys [profile] needs when they are missing. */
     private suspend fun ensureKeys(context: Context, profile: ProfileItem): Boolean {
+        if (true) return true
         val needed = AetherIdentityManager.filesNeededBy(AetherCoreManager.buildArguments(profile, 0, scan = true))
         if (AetherIdentityManager.missing(context, needed).isEmpty()) return true
         toast(context, R.string.ui_phonix_getting_keys)
