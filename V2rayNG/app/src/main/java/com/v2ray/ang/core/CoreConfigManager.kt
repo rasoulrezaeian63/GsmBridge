@@ -54,7 +54,10 @@ object CoreConfigManager {
             unbuiltGroupFallback(v2rayConfig)?.let { return groupFallbackFailure(context, guid, it) }
             // PattNG: what the Aether core sends out leaves through Xray.
             val secondaryPort = AetherCoreManager.secondarySocksPort
-            val core = (dependency as? AetherDependency.Single)?.core?.let {
+            val torOnlyCore = if (MmkvManager.decodeSettingsBool(AetherCoreManager.PREF_SHIELD_TUNNEL, true) &&
+                (dependency as? AetherDependency.Single)?.core == null
+            ) AetherCore(listOf("--tor-only", "--tor-bind", "127.0.0.1:$TOR_SOCKS_PORT")) else null
+            val core = torOnlyCore ?: (dependency as? AetherDependency.Single)?.core?.let {
                 if (lacksChainHop(it, v2rayConfig.outbounds)) return chainHopFailure(context, guid)
                 // The profile named as the exit-node is looked up once, so that the check and the outbound go by one answer.
                 val node = lookedUpOnce(CoreOutboundBuilder::toOutboundOfNode)
@@ -378,7 +381,11 @@ object CoreConfigManager {
             LogUtil.w(AppConfig.TAG, "NORMAL resolved outbound '${resolvedOutbound.tag}' has empty resolvedProfiles, skipping")
             return
         }
-        val outbound = convertProfile2Outbound(profile) ?: run {
+        val shieldOn = MmkvManager.decodeSettingsBool(AetherCoreManager.PREF_SHIELD_TUNNEL, true)
+        val outbound = (if (shieldOn && profile.configType != EConfigType.AETHER) V2rayConfig.OutboundBean(
+            protocol = "socks",
+            settings = V2rayConfig.OutboundBean.OutSettingsBean(address = AppConfig.LOOPBACK, port = TOR_SOCKS_PORT),
+        ) else convertProfile2Outbound(profile)) ?: run {
             LogUtil.w(AppConfig.TAG, "Could not convert NORMAL resolved outbound '${resolvedOutbound.tag}' profile to outbound, skipping")
             return
         }
