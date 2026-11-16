@@ -1683,6 +1683,8 @@ object AetherCoreManager {
         val tor = File(lib, "libtor.so")
         val plugin = File(lib, "libwebtunnel.so")
         if (!tor.exists() || !plugin.exists()) throw IOException("libtor.so/libwebtunnel.so missing in $lib: " + (File(lib).list()?.joinToString(",") ?: "?"))
+        torReady.value = false
+        torStep.value = "Starting Tor…"
         val listener = listenerAddressOf(arguments) ?: "127.0.0.1:${DEFAULT_SHIELD_PORT}"
         val dir = File(context.filesDir, "shield-tor").apply { mkdirs() }
         val rc = File(dir, "torrc")
@@ -1781,9 +1783,11 @@ object AetherCoreManager {
 
     /** Latest Tor start-up step, shown under the connect button. */
     val torStep = kotlinx.coroutines.flow.MutableStateFlow("")
+    val torReady = kotlinx.coroutines.flow.MutableStateFlow(false)
 
     private fun trackTorStep(line: String) {
         val m = Regex("Bootstrapped (\\d+)%[^:]*: (.*)").find(line)
+        if (m != null && m.groupValues[1] == "100") torReady.value = true
         if (m != null) { torStep.value = "Tor ${m.groupValues[1]}% - ${m.groupValues[2].trim()}"; return }
         when {
             line.contains("webtunnel", true) && line.contains("bridge", true) -> torStep.value = "Checking webtunnel bridges…"

@@ -822,7 +822,7 @@
     <string name="ui_setup_title">سرورها در حال اضافه شدن</string>
     <string name="ui_setup_fetching">در حال دریافت سرورها، لطفا منتظر بمانید</string>
     <string name="ui_setup_wait">لطفا کمی صبر کنید</string>
-    <string name="ui_setup_ready">برنامه راه‌اندازی شد و آماده اتصال می‌باشد</string>
+    <string name="ui_setup_ready">نرم‌افزار آماده اتصال می‌باشد</string>
     <string name="ui_setup_failed">راه‌اندازی کامل نشد. اشتراک را به‌روزرسانی کنید و دوباره تلاش کنید.</string>
 
     <string name="ui_servers_title">سرورها</string>

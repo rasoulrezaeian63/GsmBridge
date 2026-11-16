@@ -201,13 +201,15 @@ class MainActivity : HelperBaseComponentActivity() {
                 sub.subscription.usageInfo?.let { buildSubscriptionInfoUiModel(it, System.currentTimeMillis()) }
             }
             val torStepText by com.v2ray.ang.core.AetherCoreManager.torStep.collectAsStateWithLifecycle()
+            val torReady by com.v2ray.ang.core.AetherCoreManager.torReady.collectAsStateWithLifecycle()
+            val torBusy = uiState.isRunning && !torReady
             var livePing by remember { mutableStateOf(0L) }
             LaunchedEffect(uiState.status) {
                 (uiState.status as? MainStatus.ConnectionTest)?.let { livePing = it.result.delayMillis }
             }
-            LaunchedEffect(uiState.isRunning) {
+            LaunchedEffect(uiState.isRunning, torReady) {
                 livePing = 0L
-                if (uiState.isRunning) {
+                if (uiState.isRunning && torReady) {
                     var attempt = 0
                     while (livePing <= 0L && attempt < 6) {
                         kotlinx.coroutines.delay(if (attempt == 0) 2000L else 4000L)
@@ -221,18 +223,18 @@ class MainActivity : HelperBaseComponentActivity() {
             val statusText = when (val status = uiState.status) {
                 MainStatus.Disconnected -> stringResource(R.string.ui_home_status_disconnected)
                 MainStatus.Connected -> stringResource(R.string.ui_home_status_connected)
-                else -> mainViewModel.formatStatus(status)
+                else -> if (uiState.isRunning && torReady) stringResource(R.string.ui_home_status_connected) else mainViewModel.formatStatus(status)
             }
             SimpleHomeScreen(
                 title = PhonixPolicy.usernameOf(sub) ?: PhonixPolicy.aetherNameOf(sub),
                 info = info,
                 statusText = when {
                     scanning -> stringResource(R.string.ui_home_scanning)
-                    startingState.value && !uiState.isRunning -> torStepText.ifBlank { stringResource(R.string.ui_home_preparing) }
+                    (startingState.value && !uiState.isRunning) || torBusy -> torStepText.ifBlank { stringResource(R.string.ui_home_preparing) }
                     else -> statusText
                 },
-                isStarting = startingState.value && !uiState.isRunning,
-                isRunning = uiState.isRunning,
+                isStarting = (startingState.value && !uiState.isRunning) || torBusy,
+                isRunning = uiState.isRunning && torReady,
                 isUpdating = isLoading,
                 isScanning = scanning,
                 setupState = setupState,
@@ -241,12 +243,14 @@ class MainActivity : HelperBaseComponentActivity() {
                 manualSelection = manualGuid != null,
                 downloadSpeed = downloadSpeed,
                 uploadSpeed = uploadSpeed,
-                pingMs = if (uiState.isRunning) livePing else 0L,
+                pingMs = if (uiState.isRunning && torReady) livePing else 0L,
                 isPersian = isPersian,
                 onSelectServer = { guid ->
                     // null gives the pick back to the lowest delay; a key is a server chosen by hand
                     PhonixPolicy.setManualServerName(guid?.let { key -> servers.firstOrNull { it.guid == key }?.name })
                     (guid ?: PhonixPolicy.randomServer())?.let { setSelectServer(it) }
+                    // a new Tor exit country needs a fresh Tor
+                    if (uiState.isRunning) LauncherManager.restartService(this@MainActivity)
                     serversRevision++
                 },
                 onToggle = {

@@ -508,13 +508,11 @@ private fun ConnectionTab(
     val shownStatus = when {
         isRunning || isScanning || isStarting -> statusText
         preparing -> stringResource(R.string.ui_setup_fetching)
-        setupState == PhonixProvisioner.Setup.READY -> stringResource(R.string.ui_setup_ready)
-        setupState == PhonixProvisioner.Setup.FAILED -> stringResource(R.string.ui_setup_failed)
+        setupState == PhonixProvisioner.Setup.READY || setupState == PhonixProvisioner.Setup.FAILED -> stringResource(R.string.ui_setup_ready)
         else -> statusText
     }
     val dotColor = when {
         isRunning -> Color(0xFF22C55E)
-        setupState == PhonixProvisioner.Setup.FAILED -> c.danger
         preparing -> Color(0xFFF5A524)
         else -> Color(0xFF22C55E)
     }
