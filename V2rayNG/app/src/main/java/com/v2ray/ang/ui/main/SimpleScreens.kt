@@ -101,16 +101,16 @@ internal class UiColors(
 
 @Composable
 internal fun uiColors(): UiColors = UiColors(
-    background = Color(0xFF06140F),
-    backgroundTop = Color(0xFF0B2A1F),
-    card = Color(0xFF12281F),
-    inner = Color(0xFF1C3A2E),
-    field = Color(0xFF16322A),
-    text = Color(0xFFE8F5EE),
-    subText = Color(0xFF8FB3A2),
-    accent = Color(0xFF2EE59D),
-    idle = Color(0xFF5E7F70),
-    danger = Color(0xFFFF5C6C),
+    background = Color(0xFFFFFFFF),
+    backgroundTop = Color(0xFFFFFFFF),
+    card = Color(0xFFF3F7F5),
+    inner = Color(0xFFE6EFEB),
+    field = Color(0xFFEDF3F0),
+    text = Color(0xFF10231B),
+    subText = Color(0xFF5F7A6D),
+    accent = Color(0xFF0FA36B),
+    idle = Color(0xFF9AB0A5),
+    danger = Color(0xFFE0364A),
 )
 
 internal fun Modifier.phonixBackground(c: UiColors): Modifier =
@@ -619,11 +619,15 @@ private fun ConnectionTab(
             }
         }
         Spacer(Modifier.height(12.dp))
-        var showIp by remember { mutableStateOf(false) }
+        var showIp by remember { mutableStateOf(true) }
         var ipInfo by remember { mutableStateOf("") }
-        LaunchedEffect(showIp, isRunning) {
-            if (showIp && isRunning) {
-                ipInfo = "..."
+        LaunchedEffect(isRunning, pingMs > 0L) {
+            if (!isRunning) { ipInfo = ""; return@LaunchedEffect }
+            if (pingMs <= 0L) return@LaunchedEffect
+            ipInfo = "..."
+            repeat(5) { attempt ->
+                if (ipInfo != "..." && ipInfo != "—") return@LaunchedEffect
+                if (attempt > 0) kotlinx.coroutines.delay(3000)
                 ipInfo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     try {
                         val px = java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", 1819))
