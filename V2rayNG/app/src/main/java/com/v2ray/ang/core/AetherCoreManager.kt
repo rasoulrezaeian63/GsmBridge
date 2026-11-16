@@ -320,7 +320,7 @@ object AetherCoreManager {
 
     /** Shield Tunnel on: Tor only (with webtunnel bridges), whatever the profile says. */
     fun effectiveTor(profile: ProfileItem): AetherTor =
-        if (MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false)) AetherTor.ONLY else AetherTor.fromString(profile.aetherTor)
+        if (MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, true)) AetherTor.ONLY else AetherTor.fromString(profile.aetherTor)
 
     private fun settingValue(value: String?): String? = value?.trim()?.takeUnless { it.isEmpty() || it.startsWith('-') }
 
@@ -434,30 +434,11 @@ object AetherCoreManager {
             }
             torBind?.let { addAll(listOf(TOR_BIND, "${AppConfig.LOOPBACK}:$it")) }
             if (tor != AetherTor.OFF) {
-                // Told nothing, the core tries Tor plainly and turns to fetched bridges where Tor is blocked.
-                val bridges = AetherTorBridges.fromString(profile.aetherTorBridges)
-                when (bridges) {
-                    AetherTorBridges.AUTO, AetherTorBridges.FIRST, AetherTorBridges.NEVER -> {
-                        if (MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false)) {
-                            WebtunnelBridges.LINES.shuffled().take(12).forEach { addAll(listOf("--tor-bridge", it)) }
-                        } else when (bridges) {
-                            AetherTorBridges.FIRST -> add("--tor-bridges")
-                            AetherTorBridges.NEVER -> add("--no-tor-bridges")
-                            else -> Unit
-                        }
-                    }
-                    AetherTorBridges.OWN -> AetherFmt.bridgeLines(profile.aetherTorBridgeLines)
-                        .mapNotNull { settingValue(it) }
-                        .forEach { addAll(listOf("--tor-bridge", it)) }
-                }
-                // Where fetched bridges come from; with the profile's own lines, or none at all, nothing is fetched.
-                if (!MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false) && (bridges == AetherTorBridges.AUTO || bridges == AetherTorBridges.FIRST)) {
-                    AetherTorRelays.fromString(profile.aetherTorRelays).takeUnless { it == AetherTorRelays.AUTO }
-                        ?.let { addAll(listOf("--tor-relays", it.type)) }
-                }
+                // GsmBridge: Tor always goes through webtunnel bridges, whatever the profile says.
+                WebtunnelBridges.LINES.shuffled().take(12).forEach { addAll(listOf("--tor-bridge", it)) }
             }
 
-            if (tor != AetherTor.OFF) (settingValue(MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.takeIf { MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false) }) ?: settingValue(profile.aetherTorExit))?.let { addAll(listOf("--tor-exit", it)) }
+            if (tor != AetherTor.OFF) (settingValue(MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.takeIf { MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, true) }) ?: settingValue(profile.aetherTorExit))?.let { addAll(listOf("--tor-exit", it)) }
 
             when (psiphon) {
                 AetherPsiphon.OFF -> Unit
@@ -1014,7 +995,7 @@ object AetherCoreManager {
      */
     internal fun readyNeedsWord(arguments: List<String>): Boolean = when (aloneOf(arguments)) {
         PSIPHON_NAME -> true
-        TOR_NAME -> MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false)
+        TOR_NAME -> MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, true)
         else -> psiphonModeOf(arguments) == AetherPsiphon.CHAIN
     }
 
@@ -1681,7 +1662,7 @@ object AetherCoreManager {
         if (session !== target) return
         reapStale(context, listenerAddressOf(arguments))
         val process = try {
-            if (MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false) && "--tor-only" in arguments) {
+            if (MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, true) && "--tor-only" in arguments) {
                 startShieldTor(context, arguments)
             } else {
                 startProcess(context, arguments, markSession = true, exitKey = exitKey)
@@ -1785,7 +1766,7 @@ object AetherCoreManager {
             LogUtil.d(AppConfig.TAG, "AetherCore: output closed: ${e.message}")
         }
         val exitCode = process.waitFor()
-        if (target.chainEnd == null && MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, false) && "--tor-only" in target.arguments) {
+        if (target.chainEnd == null && MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, true) && "--tor-only" in target.arguments) {
             val tail = try {
                 File(File(target.context.filesDir, "shield-tor"), "tor.log").readLines().takeLast(3).joinToString(" | ")
             } catch (e: Exception) { "" }

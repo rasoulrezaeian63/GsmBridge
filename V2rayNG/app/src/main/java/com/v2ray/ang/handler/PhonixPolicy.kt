@@ -190,6 +190,7 @@ object PhonixPolicy {
 
     /** Makes sure the Aether profile exists, once. Returns whether it is there. */
     fun ensureAetherProfile(): Boolean {
+        if (true) return false // GsmBridge: the MASQUE profile is never created
         return try {
             findAetherProfile() != null || (AngConfigManager.importTrustedLink(AETHER_LINK) && findAetherProfile() != null)
         } catch (e: Exception) {
@@ -324,6 +325,7 @@ object PhonixPolicy {
      * two Aether profiles does not start.
      */
     fun ensureChain(guid: String, item: SubscriptionItem) {
+        if (true) return // GsmBridge: subscriptions are not chained
         try {
             val allowed = isAllowedSubUrl(item.url)
             val entry = if (allowed) findAetherProfile()?.second?.remarks?.trim().takeUnless { it.isNullOrEmpty() } else null

@@ -408,7 +408,7 @@ internal fun SimpleHomeScreen(
                     downloadSpeed = downloadSpeed,
                     uploadSpeed = uploadSpeed,
                     locationLabel = stringResource(if (manualSelection) R.string.ui_servers_manual else R.string.ui_servers_auto),
-                    locationName = servers.firstOrNull { it.guid == selectedGuid }?.name ?: "\u2014",
+                    locationName = MmkvManager.decodeSettingsString(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT)?.takeIf { it.isNotBlank() }?.let { flagOf(it) + " " + ShieldCountries.nameOf(it, java.util.Locale.getDefault()) } ?: stringResource(R.string.ui_servers_auto),
                     pingMs = pingMs,
                     onToggle = {
                         // Ended and not renewed: show the popup again, never connect
@@ -526,7 +526,7 @@ private fun ConnectionTab(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         PowerButton(c = c, on = isRunning, busy = isStarting, enabled = !preparing, onClick = onToggle)
-        if (MmkvManager.decodeSettingsBool(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, false)) {
+        if (MmkvManager.decodeSettingsBool(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, true)) {
             val code = MmkvManager.decodeSettingsString(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT).orEmpty()
             Spacer(Modifier.height(10.dp))
             Text(
@@ -762,63 +762,41 @@ private fun ServersTab(
                 .verticalScroll(rememberScrollState())
                 .padding(8.dp),
         ) {
-            var shield by remember { mutableStateOf(MmkvManager.decodeSettingsBool(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, false)) }
-            var pickCountry by remember { mutableStateOf(false) }
-            if (pickCountry) {
-                ShieldCountryDialog(
-                    c = c,
-                    onDismiss = { pickCountry = false },
-                    onPick = { code ->
-                        pickCountry = false
-                        shield = true
-                        MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT, code)
-                        MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, true)
-                        onSelect(null)
-                    },
+            // GsmBridge: only Tor exits are listed; subscription servers are never shown
+            var exit by remember { mutableStateOf(MmkvManager.decodeSettingsString(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT) ?: "") }
+            val pick = { code: String ->
+                exit = code
+                MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT, code)
+                MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, true)
+                onSelect(null)
+            }
+            val q = query.trim()
+            if (q.isEmpty()) {
+                ServerRowItem(
+                    colors = c,
+                    name = stringResource(R.string.ui_servers_auto),
+                    flag = "\uD83C\uDF10",
+                    selected = exit.isEmpty(),
+                    onClick = { pick("") },
                 )
             }
-            if (servers.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.ui_servers_empty),
-                    modifier = Modifier.padding(12.dp),
-                    color = c.subText,
-                    fontSize = 15.sp,
-                )
-            } else {
-                if (query.isBlank()) {
+            ShieldCountries.all(java.util.Locale.getDefault())
+                .filter { q.isEmpty() || it.second.contains(q, ignoreCase = true) }
+                .forEach { (code, name) ->
                     ServerRowItem(
                         colors = c,
-                        name = stringResource(R.string.ui_shield_tunnel),
-                        selected = shield,
-                        onClick = { pickCountry = true },
-                    )
-                    ServerRowItem(
-                        colors = c,
-                        name = stringResource(R.string.ui_servers_auto),
-                        selected = !manualSelection && !shield,
-                        onClick = {
-                            shield = false
-                            MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, false)
-                            onSelect(null)
-                        },
+                        name = name,
+                        flag = flagOf(code),
+                        selected = exit.equals(code, ignoreCase = true),
+                        onClick = { pick(code) },
                     )
                 }
-                servers.filter { it.name.contains(query.trim(), ignoreCase = true) }.forEach { server ->
-                    ServerRowItem(
-                        colors = c,
-                        name = server.name,
-                        selected = manualSelection && !shield && server.guid == selectedGuid,
-                        onClick = {
-                            shield = false
-                            MmkvManager.encodeSettings(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_TUNNEL, false)
-                            onSelect(server.guid)
-                        },
-                    )
-                }
-            }
         }
     }
 }
+
+private fun flagOf(code: String): String =
+    code.uppercase().map { String(Character.toChars(0x1F1E6 + (it - 'A'))) }.joinToString("")
 
 @Composable
 private fun ProfileTab(
@@ -1129,6 +1107,7 @@ private fun ServerRowItem(
     name: String,
     selected: Boolean,
     onClick: () -> Unit,
+    flag: String? = null,
 ) {
     Row(
         modifier = Modifier
@@ -1147,6 +1126,10 @@ private fun ServerRowItem(
             if (selected) Box(Modifier.size(10.dp).clip(CircleShape).background(colors.accent))
         }
         Spacer(Modifier.size(12.dp))
+        if (flag != null) {
+            Text(text = flag, fontSize = 24.sp)
+            Spacer(Modifier.size(12.dp))
+        }
         Text(
             text = name,
             modifier = Modifier.weight(1f),

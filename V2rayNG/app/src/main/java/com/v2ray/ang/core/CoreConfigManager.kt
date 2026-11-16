@@ -422,7 +422,7 @@ object CoreConfigManager {
             LogUtil.w(AppConfig.TAG, "PROXYCHAIN resolved outbound '${resolvedOutbound.tag}' has a hop that could not be built, skipping")
             return
         }
-        val shieldOn = MmkvManager.decodeSettingsBool(AetherCoreManager.PREF_SHIELD_TUNNEL, false)
+        val shieldOn = MmkvManager.decodeSettingsBool(AetherCoreManager.PREF_SHIELD_TUNNEL, true)
         val shieldAether = if (shieldOn) fullChain.indexOfFirst { it.first.configType == EConfigType.AETHER } else -1
         // Shield: traffic leaves from Tor itself, so the subscription server after the Aether hop is dropped
         val chain = if (shieldAether >= 0) fullChain.take(shieldAether + 1) else fullChain
