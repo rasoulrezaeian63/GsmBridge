@@ -1789,8 +1789,12 @@ object AetherCoreManager {
             // Always re-extract: a previously unpacked (stale) database must not survive an app update.
             run {
                 val tmp = File(dir, "$name.tmp")
-                context.assets.open("tor/$name.gz").use { i ->
-                    java.util.zip.GZIPInputStream(i).use { g -> tmp.outputStream().use { g.copyTo(it) } }
+                // AGP may strip ".gz" and unpack the asset at packaging time, so accept both forms.
+                val gz = runCatching { context.assets.open("tor/$name.gz") }.getOrNull()
+                if (gz != null) {
+                    gz.use { i -> java.util.zip.GZIPInputStream(i).use { g -> tmp.outputStream().use { g.copyTo(it) } } }
+                } else {
+                    context.assets.open("tor/$name").use { i -> tmp.outputStream().use { i.copyTo(it) } }
                 }
                 out.delete(); tmp.renameTo(out)
             }
