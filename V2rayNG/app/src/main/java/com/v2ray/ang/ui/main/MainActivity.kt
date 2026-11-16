@@ -203,6 +203,15 @@ class MainActivity : HelperBaseComponentActivity() {
             val torStepText by com.v2ray.ang.core.AetherCoreManager.torStep.collectAsStateWithLifecycle()
             val torReady by com.v2ray.ang.core.AetherCoreManager.torReady.collectAsStateWithLifecycle()
             val torBusy = uiState.isRunning && !torReady
+            LaunchedEffect(uiState.isRunning) {
+                if (uiState.isRunning) {
+                    com.v2ray.ang.core.AetherCoreManager.torReady.value = false
+                    while (!com.v2ray.ang.core.AetherCoreManager.torReady.value) {
+                        withContext(kotlinx.coroutines.Dispatchers.IO) { com.v2ray.ang.core.AetherCoreManager.syncTorFromLog(this@MainActivity) }
+                        kotlinx.coroutines.delay(1000L)
+                    }
+                }
+            }
             var livePing by remember { mutableStateOf(0L) }
             LaunchedEffect(uiState.status) {
                 (uiState.status as? MainStatus.ConnectionTest)?.let { livePing = it.result.delayMillis }

@@ -1807,6 +1807,15 @@ object AetherCoreManager {
     val torStep = kotlinx.coroutines.flow.MutableStateFlow("")
     val torReady = kotlinx.coroutines.flow.MutableStateFlow(false)
 
+    /** Tor runs in the :daemon process, so the UI process reads progress from tor.log. */
+    fun syncTorFromLog(context: Context) {
+        try {
+            val f = File(File(context.filesDir, "shield-tor"), "tor.log")
+            val l = f.takeIf { it.exists() }?.readLines()?.lastOrNull { it.contains("Bootstrapped ") }
+            if (l != null) trackTorStep(l)
+        } catch (_: Exception) {}
+    }
+
     private fun trackTorStep(line: String) {
         val m = Regex("Bootstrapped (\\d+)%[^:]*: (.*)").find(line)
         if (m != null && m.groupValues[1] == "100") torReady.value = true
