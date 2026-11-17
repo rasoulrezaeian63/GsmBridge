@@ -1061,11 +1061,19 @@ object AetherCoreManager {
     fun stop() {
         val current = session ?: return
         session = null
+        current.bridgeSession?.close()
+        current.bridgeNetwork?.close()
+        torReady.value = false
         lifecycle.execute { current.process?.let { end(it, current.context) } }
     }
 
-    suspend fun awaitListening(timeoutMs: Long): Boolean =
-        awaitReady(timeoutMs, READY_POLL_MS, { isRunning }, { torReady.value || session?.let { it.wordSeen && answersSocks(it.port) } == true })
+    suspend fun awaitListening(timeoutMs: Long): Boolean {
+        val target = session
+        if (target?.nativeShield != true) return awaitReady(timeoutMs, READY_POLL_MS,
+            { isRunning }, { torReady.value || session?.let { it.wordSeen && answersSocks(it.port) } == true })
+        return awaitReady(maxOf(timeoutMs, ShieldBridgeQuality.START_BUDGET_MS), READY_POLL_MS,
+            { session === target && isRunning }, { session === target && target.wordSeen && answersSocks(target.port) })
+    }
 
     internal suspend fun awaitReady(
         timeoutMs: Long,
@@ -1662,8 +1670,8 @@ object AetherCoreManager {
         if (session !== target) return
         reapStale(context, listenerAddressOf(arguments))
         val process = try {
-            if (MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, true) && "--tor-only" in arguments) {
-                startShieldTor(context, arguments)
+            if (target.nativeShield) {
+                startShieldTor(target, context, arguments)
             } else {
                 startProcess(context, arguments, markSession = true, exitKey = exitKey)
             }
@@ -1678,7 +1686,7 @@ object AetherCoreManager {
     }
 
     /** Shield Tunnel: classic Tor (libtor.so) over webtunnel bridges (libwebtunnel.so), serving SOCKS on the core's listener. */
-    private fun startShieldTor(context: Context, arguments: List<String>): Process {
+    private fun startShieldTor(target: Session, context: Context, arguments: List<String>): Process {
         val lib = context.applicationInfo.nativeLibraryDir
         val tor = File(lib, "libtor.so")
         val plugin = File(lib, "libwebtunnel.so")
@@ -1688,9 +1696,24 @@ object AetherCoreManager {
         val listener = listenerAddressOf(arguments) ?: "127.0.0.1:${DEFAULT_SHIELD_PORT}"
         val dir = File(context.filesDir, "shield-tor").apply { mkdirs() }
         val rc = File(dir, "torrc")
-        val bridges = ShieldBridgeRanker.pick(WebtunnelBridges.LINES, 8)
-        val fragPort = if (!SHIELD_FRAGMENT) 0 else try { shieldFrag?.stop(); ShieldFragmentProxy(5, 0, true, 262144).also { shieldFrag = it }.start() } catch (e: Exception) { LogUtil.w(AppConfig.TAG, "ShieldTor: fragment proxy failed: $e"); 0 }
+        val exit = ShieldTorControl.countryCode(
+            MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.trim('{', '}')
+                ?: arguments.indexOf("--tor-exit").takeIf { it >= 0 }?.let { arguments.getOrNull(it + 1)?.trim('{', '}') })
+        val network = try {
+            ShieldBridgeSession.NetworkScope(context).also { target.bridgeNetwork = it; it.awaitInitial() }
+        } catch (e: Exception) {
+            target.bridgeNetwork?.close()
+            LogUtil.w(AppConfig.TAG, "ShieldTor: network scope unavailable (${e.javaClass.simpleName}); ranking/fallback disabled")
+            null
+        }
         val geo = installGeoIp(context, File(context.filesDir, "tor").apply { mkdirs() })
+        val scope = if (geo != null) network?.key(exit) else null
+        val bridges = ShieldBridgeRanker.pick(WebtunnelBridges.LINES, ShieldBridgeQuality.MAX_ATTEMPTS, scope)
+        if (session !== target || bridges.isEmpty()) {
+            network?.close()
+            throw IOException("Shield Tor start cancelled or no bridges available")
+        }
+        val fragPort = if (!SHIELD_FRAGMENT) 0 else try { shieldFrag?.stop(); ShieldFragmentProxy(5, 0, true, 262144).also { shieldFrag = it }.start() } catch (e: Exception) { LogUtil.w(AppConfig.TAG, "ShieldTor: fragment proxy failed: $e"); 0 }
         rc.writeText(buildString {
             if (geo != null) {
                 appendLine("GeoIPFile ${geo.first.absolutePath}")
@@ -1724,10 +1747,7 @@ object AetherCoreManager {
             appendLine("ClientUseIPv6 0")
             if (fragPort > 0) appendLine("Socks5Proxy 127.0.0.1:$fragPort")
             appendLine("ClientTransportPlugin webtunnel exec ${plugin.absolutePath}")
-            // The saved choice is read here directly (settings are shared across processes), so a stale launch config can never override it.
-            val exit = (MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.trim('{', '}')?.takeIf { it.length == 2 }
-                ?: arguments.indexOf("--tor-exit").takeIf { it >= 0 }?.let { arguments.getOrNull(it + 1) })
-                ?.trim('{', '}')?.uppercase()
+            // Use the saved country captured for this native session and its quality scope.
             LogUtil.w(AppConfig.TAG, "ShieldTor: exit country = ${exit ?: "smart"} geo=${if (geo != null) "ok" else "FAILED: $geoError"}")
             shieldWantedExit = null
             if (geo == null) {
@@ -1743,7 +1763,7 @@ object AetherCoreManager {
                 // Country geography alone is not a throughput or latency measurement.
                 appendLine("StrictNodes 0")
             }
-            bridges.forEach { appendLine("Bridge $it") }
+            appendLine("Bridge ${bridges.first()}")
         })
         File(dir, "data").mkdirs()
         File(dir, "cache").mkdirs()
@@ -1756,22 +1776,24 @@ object AetherCoreManager {
         builder.environment()["HOME"] = dir.absolutePath
         builder.environment()["LD_LIBRARY_PATH"] = lib
         builder.environment()["TMPDIR"] = context.cacheDir.absolutePath
+        if (session !== target) throw IOException("Shield Tor start cancelled")
         val started = builder.start()
-        // Fallback: the stdout line can be missed, so the log file is watched for the 100% line too.
-        val logFile = File(dir, "tor.log")
-        thread(name = "shield-tor-ready", isDaemon = true) {
-            while (started.isAlive && !torReady.value) {
-                try {
-                    val l = logFile.takeIf { it.exists() }?.readLines()?.lastOrNull { it.contains("Bootstrapped ") }
-                    if (l != null) trackTorStep(l)
-                } catch (_: Exception) {}
-                Thread.sleep(1000)
-            }
-            LogUtil.w(AppConfig.TAG, "ShieldTorControl: bootstrap done alive=${started.isAlive} ready=${torReady.value}")
-            // Bootstrap: observe a built circuit, without claiming stream-specific exit verification.
-            if (started.isAlive && torReady.value) ShieldTorControl.applyFastMiddles(File(dir, "data"))
-            if (started.isAlive && torReady.value) ShieldTorControl.verifyExit(File(dir, "data"), shieldWantedExit)
-        }
+        target.bridgeSession = ShieldBridgeSession(
+            cookie = File(File(dir, "data"), ShieldTorControl.COOKIE_NAME),
+            candidates = bridges,
+            socksPort = target.port,
+            scope = scope,
+            currentScope = { network?.key(exit) },
+            alive = { session === target && started.isAlive },
+            alreadyReady = { target.wordSeen },
+            onReady = {
+                synchronized(this) {
+                    if (session === target) { target.wordSeen = true; torReady.value = true }
+                }
+            },
+            wantedExit = shieldWantedExit,
+        ).also { it.start() }
+        if (session !== target) { target.bridgeSession?.close(); network?.close() }
         return started
     }
 
@@ -1859,7 +1881,7 @@ object AetherCoreManager {
     private fun watch(target: Session, process: Process) {
         try {
             process.inputStream.bufferedReader().forEachLine { line ->
-                trackTorStep(line)
+                synchronized(this) { if (session === target) trackTorStep(line) }
                 relay(line, "aether")
                 if (line.isNotBlank()) target.lastLine = line.trim().takeLast(160)
                 if (!target.wordSeen && isReadyWord(line)) target.wordSeen = true
@@ -1897,6 +1919,8 @@ object AetherCoreManager {
 
     @Synchronized
     private fun release(target: Session): Boolean {
+        target.bridgeSession?.close()
+        target.bridgeNetwork?.close()
         if (session !== target) return false
         // Set before the session goes and the exit is reported, which reads them: the warm-up wait reports the exit
         // too, as soon as it sees no session. The core has written its last line by now.
@@ -1917,6 +1941,9 @@ object AetherCoreManager {
         val context: Context,
         val onExit: () -> Unit,
     ) {
+        val nativeShield = MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, true) && "--tor-only" in arguments
+        @Volatile var bridgeSession: ShieldBridgeSession? = null
+        @Volatile var bridgeNetwork: ShieldBridgeSession.NetworkScope? = null
         var process: Process? = null
 
         @Volatile
