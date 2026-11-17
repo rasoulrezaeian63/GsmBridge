@@ -8,6 +8,7 @@ object ShieldCountries {
         "DE", "NL", "FR", "GB", "SE", "CH", "AT", "NO", "FI", "DK", "BE", "LU", "IE", "IS",
         "ES", "IT", "PT", "PL", "CZ", "RO", "BG", "HU", "MD", "UA", "LV", "LT", "EE",
         "US", "CA", "JP", "SG", "HK", "AU", "NZ", "BR", "AR", "CL", "ZA", "IN", "IL",
+        "KR", "TR", "AE", "AM", "AF", "AZ",
     )
 
     /** The codes, each with its name in the app's language, sorted by that name. */
