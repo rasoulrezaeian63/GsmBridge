@@ -159,11 +159,22 @@ internal object ShieldTorControl {
             val fp = last.split(" ").firstOrNull { it.startsWith("$") && it.length > 1 }
                 ?.split(",")?.lastOrNull()?.removePrefix("$")?.substringBefore("~")?.substringBefore("=")
                 ?.takeIf { it.length == 40 } ?: return null
-            val ns = command("GETINFO ns/id/$fp")
-            // v3 router status: "r nick identity digest date time IP ORPort DirPort"
-            val ip = ns.firstOrNull { it.startsWith("r ") }?.split(" ")?.getOrNull(6) ?: return null
+            val ip = ipOf(fp) ?: return null
             val cc = command("GETINFO ip-to-country/$ip").firstOrNull()?.substringAfter("=")?.trim()?.uppercase() ?: return null
             return cc.takeIf { it.length == 2 }
+        }
+
+        /** Relay IP: ns/id, then desc/id, then a scan of ns/all (some Tor builds reject ns/id). */
+        private fun ipOf(fp: String): String? {
+            runCatching { command("GETINFO ns/id/$fp") }.getOrNull()
+                ?.firstOrNull { it.startsWith("r ") }?.split(" ")?.getOrNull(6)?.let { return it }
+            runCatching { command("GETINFO desc/id/$fp") }.getOrNull()
+                ?.firstOrNull { it.startsWith("router ") }?.split(" ")?.getOrNull(2)?.let { return it }
+            val want = runCatching {
+                android.util.Base64.encodeToString(fp.chunked(2).map { it.toInt(16).toByte() }.toByteArray(), android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+            }.getOrNull() ?: return null
+            return runCatching { command("GETINFO ns/all") }.getOrNull()
+                ?.firstOrNull { it.startsWith("r ") && it.split(" ").getOrNull(2) == want }?.split(" ")?.getOrNull(6)
         }
 
         override fun close() { try { sock.close() } catch (_: Exception) {} }

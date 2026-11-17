@@ -1689,6 +1689,7 @@ object AetherCoreManager {
         val dir = File(context.filesDir, "shield-tor").apply { mkdirs() }
         val rc = File(dir, "torrc")
         val bridges = ShieldBridgeRanker.pick(WebtunnelBridges.LINES, 12)
+        val fragPort = try { shieldFrag?.stop(); ShieldFragmentProxy(5, 0, true, 262144).also { shieldFrag = it }.start() } catch (e: Exception) { LogUtil.w(AppConfig.TAG, "ShieldTor: fragment proxy failed: $e"); 0 }
         val geo = installGeoIp(context, File(context.filesDir, "tor").apply { mkdirs() })
         rc.writeText(buildString {
             if (geo != null) {
@@ -1726,6 +1727,7 @@ object AetherCoreManager {
             appendLine("UpdateBridgesFromAuthority 0")
             appendLine("AssumeReachable 1")
             appendLine("ClientUseIPv6 0")
+            if (fragPort > 0) appendLine("Socks5Proxy 127.0.0.1:$fragPort")
             appendLine("ClientTransportPlugin webtunnel exec ${plugin.absolutePath}")
             // The saved choice is read here directly (settings are shared across processes), so a stale launch config can never override it.
             val exit = (MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.trim('{', '}')?.takeIf { it.length == 2 }
@@ -1779,6 +1781,7 @@ object AetherCoreManager {
     }
 
     private const val DEFAULT_SHIELD_PORT = 1819
+    @Volatile private var shieldFrag: ShieldFragmentProxy? = null
 
     /** Tor's geoip files (needed for ExitNodes {CC}), unpacked from assets/tor like UAC does. */
     @Volatile private var geoError: String? = null
