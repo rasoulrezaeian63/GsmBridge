@@ -48,7 +48,7 @@ internal fun parseTorPercent(step: String): Int? =
  * bootstrap percent and its pace grows with it. Not dismissable until finished.
  */
 @Composable
-fun TigerProgressDialog(
+internal fun TigerProgressDialog(
     c: UiColors,
     step: String,
     ready: Boolean,
