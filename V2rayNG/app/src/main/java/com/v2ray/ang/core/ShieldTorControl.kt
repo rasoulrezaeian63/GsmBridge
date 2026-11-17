@@ -50,6 +50,58 @@ internal object ShieldTorControl {
         }
     }
 
+    private const val MIDDLE_COUNT = 60
+    private const val MIN_USABLE = 10
+
+    /** Pins MiddleNodes to the fastest Fast+Stable relays (as UAC's TorFastRelays does). */
+    fun applyFastMiddles(dir: File) {
+        try {
+            Session().use { s ->
+                s.authenticate(File(dir, COOKIE_NAME))
+                val fps = pickMiddles(s.command("GETINFO ns/all"))
+                if (fps.size < MIN_USABLE) {
+                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: only ${fps.size} fast relays, MiddleNodes unset")
+                    return
+                }
+                s.command("SETCONF MiddleNodes=" + fps.joinToString(",") { "$" + it })
+                LogUtil.w(AppConfig.TAG, "ShieldTorControl: MiddleNodes set to ${fps.size} fast relays")
+            }
+        } catch (e: Exception) {
+            LogUtil.w(AppConfig.TAG, "ShieldTorControl: fast middles failed: $e")
+        }
+    }
+
+    private class R(val fp: String, val bw: Long, val flags: Set<String>)
+
+    private fun pickMiddles(body: List<String>): List<String> {
+        val out = ArrayList<R>()
+        var fp: String? = null
+        var flags: Set<String> = emptySet()
+        for (raw in body) {
+            val line = raw.trim()
+            when {
+                line.startsWith("r ") -> {
+                    fp = line.split(' ').getOrNull(2)?.let { b64 ->
+                        runCatching {
+                            val bytes = android.util.Base64.decode(b64 + "=".repeat((4 - b64.length % 4) % 4), android.util.Base64.DEFAULT)
+                            bytes.joinToString("") { "%02X".format(it) }
+                        }.getOrNull()?.takeIf { it.length == 40 }
+                    }
+                    flags = emptySet()
+                }
+                line.startsWith("s ") -> flags = line.substring(2).split(' ').toSet()
+                line.startsWith("w ") -> {
+                    val bw = Regex("Bandwidth=(\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull()
+                    val f = fp
+                    if (f != null && bw != null) out += R(f, bw, flags)
+                    fp = null
+                }
+            }
+        }
+        return out.filter { "Fast" in it.flags && "Stable" in it.flags && "Running" in it.flags && "Valid" in it.flags && "BadExit" !in it.flags }
+            .sortedByDescending { it.bw }.take(MIDDLE_COUNT).map { it.fp }
+    }
+
     private class Session : AutoCloseable {
         private val sock = Socket().apply { connect(InetSocketAddress("127.0.0.1", CONTROL_PORT), 5000); soTimeout = 15000 }
         private val reader = BufferedReader(InputStreamReader(sock.getInputStream()))

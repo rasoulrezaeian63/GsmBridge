@@ -109,8 +109,9 @@ class TProxyService(
             val udpTimeout = parts.getOrNull(1)?.toIntOrNull() ?: 60
 
             appendLine("misc:")
+            appendLine("  tcp-buffer-size: 262144")
             appendLine("  tcp-read-write-timeout: ${tcpTimeout * 1000}")
-            appendLine("  udp-read-write-timeout: ${udpTimeout * 1000}")
+            appendLine("  udp-read-write-timeout: ${(if (MmkvManager.decodeSettingsBool("pref_shield_tunnel", true)) minOf(udpTimeout, 10) else udpTimeout) * 1000}")
             appendLine("  log-level: ${MmkvManager.decodeSettingsString(AppConfig.PREF_HEV_TUNNEL_LOGLEVEL, AppConfig.DEFAULT_HEV_TUNNEL_LOGLEVEL)}")
         }
     }

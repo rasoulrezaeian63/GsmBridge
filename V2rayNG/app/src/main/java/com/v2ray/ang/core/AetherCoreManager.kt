@@ -435,7 +435,7 @@ object AetherCoreManager {
             torBind?.let { addAll(listOf(TOR_BIND, "${AppConfig.LOOPBACK}:$it")) }
             if (tor != AetherTor.OFF) {
                 // GsmBridge: Tor always goes through webtunnel bridges, whatever the profile says.
-                WebtunnelBridges.LINES.shuffled().take(12).forEach { addAll(listOf("--tor-bridge", it)) }
+                ShieldBridgeRanker.pick(WebtunnelBridges.LINES, 12).forEach { addAll(listOf("--tor-bridge", it)) }
             }
 
             if (tor != AetherTor.OFF) (settingValue(MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.takeIf { MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, true) }) ?: settingValue(profile.aetherTorExit))?.let { addAll(listOf("--tor-exit", it)) }
@@ -1688,7 +1688,7 @@ object AetherCoreManager {
         val listener = listenerAddressOf(arguments) ?: "127.0.0.1:${DEFAULT_SHIELD_PORT}"
         val dir = File(context.filesDir, "shield-tor").apply { mkdirs() }
         val rc = File(dir, "torrc")
-        val bridges = WebtunnelBridges.LINES.shuffled().take(12)
+        val bridges = ShieldBridgeRanker.pick(WebtunnelBridges.LINES, 12)
         val geo = installGeoIp(context, File(context.filesDir, "tor").apply { mkdirs() })
         rc.writeText(buildString {
             if (geo != null) {
@@ -1772,6 +1772,7 @@ object AetherCoreManager {
             }
             LogUtil.w(AppConfig.TAG, "ShieldTorControl: bootstrap done alive=${started.isAlive} ready=${torReady.value}")
             // Bootstrapped: confirm through ControlPort that the exit really is in the chosen country.
+            if (started.isAlive && torReady.value) ShieldTorControl.applyFastMiddles(File(dir, "data"))
             if (started.isAlive && torReady.value) ShieldTorControl.verifyExit(File(dir, "data"), shieldWantedExit)
         }
         return started
