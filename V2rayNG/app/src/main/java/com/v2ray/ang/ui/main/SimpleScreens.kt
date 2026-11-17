@@ -116,7 +116,7 @@ internal fun uiColors(): UiColors = UiColors(
 internal fun Modifier.phonixBackground(c: UiColors): Modifier =
     background(Brush.verticalGradient(listOf(c.backgroundTop, c.background)))
 
-private const val BUY_SUB_URL = "https://t.me/GSMVPNFREE_BOT"
+private const val BUY_SUB_URL = "https://t.me/Gsmbridgbot"
 
 private fun Context.findActivity(): Activity? {
     var context = this
@@ -362,13 +362,15 @@ internal fun SimpleHomeScreen(
     val tab = tabs[tabIndex.coerceIn(0, tabs.size - 1)]
     val preparing = setupState == PhonixProvisioner.Setup.PREPARING
     // The time is over, or the traffic is used up
-    val ended = info != null && (info.expired || (info.totalBytes > 0L && info.usedBytes >= info.totalBytes))
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(30_000L); nowMs = System.currentTimeMillis() } }
+    val ended = info != null && (info.expired || (info.expireMillis?.let { it <= nowMs } == true) || (info.totalBytes > 0L && info.usedBytes >= info.totalBytes))
     var showEnded by rememberSaveable { mutableStateOf(false) }
     // Shown when the subscription ends; removed by itself once it is renewed (ended turns false)
     LaunchedEffect(ended) { showEnded = ended }
     androidx.activity.compose.BackHandler(enabled = tabIndex != 0) { tabIndex = 0 }
     // the subscription info is refreshed once a day while the app is open
-    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(24L * 60 * 60 * 1000); onUpdate() } }
+    LaunchedEffect(Unit) { while (true) { onUpdate(); kotlinx.coroutines.delay(15L * 60 * 1000) } }
     val drawerState = androidx.compose.material3.rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -451,7 +453,8 @@ internal fun SimpleHomeScreen(
     }
 
     if (showEnded && ended) {
-        EndedDialog(isPersian = isPersian, onClose = { showEnded = false }, onBuy = {
+        EndedDialog(isPersian = isPersian, onClose = { showEnded = false; onUpdate() }, onBuy = {
+            onUpdate()
             try {
                 ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(BUY_SUB_URL)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Exception) {
@@ -462,32 +465,49 @@ internal fun SimpleHomeScreen(
 
 @Composable
 private fun EndedDialog(isPersian: Boolean, onClose: () -> Unit, onBuy: () -> Unit) {
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onClose,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
-                val w = maxWidth
-                val h = w * (1312f / 1199f)
-                Box(Modifier.size(w, h)) {
-                    Image(
-                        painter = painterResource(R.drawable.ended_popup),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
-                    )
-                    // close button
-                    Box(
-                        Modifier.offset(x = w * 0.83f, y = h * 0.11f).size(w * 0.14f, h * 0.10f)
-                            .clip(CircleShape).clickable(onClick = onClose),
-                    )
-                    // buy button
-                    Box(
-                        Modifier.offset(x = w * 0.09f, y = h * 0.61f).size(w * 0.82f, h * 0.17f)
-                            .clip(RoundedCornerShape(50)).clickable(onClick = onBuy),
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides if (isPersian) LayoutDirection.Rtl else LayoutDirection.Ltr,
+        ) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Brush.verticalGradient(listOf(Color(0xFF1B2A4A), Color(0xFF0B1226))))
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    Modifier.size(64.dp).clip(CircleShape).background(Color(0x33FF6B6B)),
+                    contentAlignment = Alignment.Center,
+                ) { Text("⏰", fontSize = 30.sp) }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    if (isPersian) "زمان اشتراک شما به پایان رسید" else "Your subscription time has ended",
+                    color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (isPersian) "برای تمدید اشتراک به ربات تلگرام ما مراجعه کنید."
+                    else "Open our Telegram bot to renew your subscription.",
+                    color = Color(0xFFB8C4E0), fontSize = 14.sp, textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(20.dp))
+                Box(
+                    Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(50))
+                        .background(Brush.horizontalGradient(listOf(Color(0xFF2AABEE), Color(0xFF229ED9))))
+                        .clickable(onClick = onBuy),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (isPersian) "تمدید در تلگرام  @Gsmbridgbot" else "Renew on Telegram  @Gsmbridgbot",
+                        color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                     )
                 }
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    if (isPersian) "بستن" else "Close", color = Color(0xFF8FA0C8), fontSize = 13.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClose).padding(8.dp),
+                )
             }
         }
     }
