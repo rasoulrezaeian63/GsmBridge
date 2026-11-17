@@ -12,62 +12,57 @@ import java.net.Socket
 
 /**
  * Post-bootstrap check through Tor's ControlPort, modelled on UAC's TorExitCountry:
- * GETCONF ExitNodes -> re-apply with SETCONF if needed -> inspect the built exit -> NEWNYM and retry on mismatch.
- * Everything is checked with Tor's own GeoIP (ip-to-country), so no external site is involved.
+ * GETCONF ExitNodes -> re-apply with SETCONF if needed -> observe built circuits.
+ * A built circuit is not proof of the exit used by an application's stream. Observations
+ * must never tear down active circuits or trigger repeated NEWNYM requests.
  */
 internal object ShieldTorControl {
     const val CONTROL_PORT = 1822
     const val COOKIE_NAME = "control_auth_cookie"
     private const val MAX_ATTEMPTS = 5
 
-    fun verifyExit(dir: File, wanted: String?) {
-        LogUtil.w(AppConfig.TAG, "ShieldTorControl: start, wanted=$wanted")
-        if (wanted == null) return
-        val cookie = File(dir, COOKIE_NAME)
+    fun verifyExit(s: Session, wanted: String?, active: () -> Boolean) {
+        val country = countryCode(wanted) ?: return
         try {
-            Session().use { s ->
-                s.authenticate(cookie)
-                // Re-apply the country rule in case the running Tor drifted from torrc.
-                if (!s.getConfExits().contains(wanted)) {
-                    s.command("SETCONF ExitNodes={$wanted} StrictNodes=1")
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: re-applied ExitNodes {$wanted}")
-                }
-                for (attempt in 1..MAX_ATTEMPTS) {
-                    val actual = s.currentExitCountry()
-                    if (actual == wanted) {
-                        LogUtil.w(AppConfig.TAG, "ShieldTorControl: exit verified $actual (attempt $attempt)")
-                        return
-                    }
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: exit is ${actual ?: "unknown"}, want $wanted; NEWNYM (attempt $attempt)")
-                    s.closeBuiltCircuits()
-                    s.command("SIGNAL NEWNYM")
-                    Thread.sleep(3000)
-                }
-                LogUtil.w(AppConfig.TAG, "ShieldTorControl: could not get an exit in $wanted after $MAX_ATTEMPTS attempts")
+            if (!active()) return
+            if (!s.getConfExits().contains(country)) {
+                if (!active()) return
+                s.command("SETCONF ExitNodes={$country} StrictNodes=1")
+                LogUtil.w(AppConfig.TAG, "ShieldTorControl: re-applied ExitNodes {$country}")
             }
+            for (attempt in 1..MAX_ATTEMPTS) {
+                if (!active()) return
+                val actual = s.currentExitCountry()
+                if (actual == country) {
+                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: built circuit country=$actual (not stream verification)")
+                    return
+                }
+                LogUtil.w(AppConfig.TAG, "ShieldTorControl: observed ${actual ?: "unknown"}, want $country; preserving circuits (attempt $attempt)")
+                if (attempt < MAX_ATTEMPTS) Thread.sleep(3000)
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
         } catch (e: Exception) {
-            LogUtil.w(AppConfig.TAG, "ShieldTorControl: check failed: $e")
+            if (active()) LogUtil.w(AppConfig.TAG, "ShieldTorControl: check failed (${e.javaClass.simpleName})")
         }
     }
+
+    internal fun countryCode(value: String?): String? = value?.trim()?.uppercase(java.util.Locale.ROOT)
+        ?.takeIf { Regex("[A-Z]{2}").matches(it) }
 
     private const val MIDDLE_COUNT = 60
     private const val MIN_USABLE = 10
 
     /** Pins MiddleNodes to the fastest Fast+Stable relays (as UAC's TorFastRelays does). */
-    fun applyFastMiddles(dir: File) {
+    fun applyFastMiddles(s: Session, active: () -> Boolean) {
         try {
-            Session().use { s ->
-                s.authenticate(File(dir, COOKIE_NAME))
-                val fps = pickMiddles(s.command("GETINFO ns/all"))
-                if (fps.size < MIN_USABLE) {
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: only ${fps.size} fast relays, MiddleNodes unset")
-                    return
-                }
-                s.command("SETCONF MiddleNodes=" + fps.joinToString(",") { "$" + it })
-                LogUtil.w(AppConfig.TAG, "ShieldTorControl: MiddleNodes set to ${fps.size} fast relays")
-            }
+            if (!active()) return
+            val fps = pickMiddles(s.command("GETINFO ns/all"))
+            if (fps.size < MIN_USABLE || !active()) return
+            s.command("SETCONF MiddleNodes=" + fps.joinToString(",") { "$" + it })
+            LogUtil.w(AppConfig.TAG, "ShieldTorControl: MiddleNodes set to ${fps.size} fast relays")
         } catch (e: Exception) {
-            LogUtil.w(AppConfig.TAG, "ShieldTorControl: fast middles failed: $e")
+            if (active()) LogUtil.w(AppConfig.TAG, "ShieldTorControl: fast middles failed (${e.javaClass.simpleName})")
         }
     }
 
@@ -102,14 +97,52 @@ internal object ShieldTorControl {
             .sortedByDescending { it.bw }.take(MIDDLE_COUNT).map { it.fp }
     }
 
-    private class Session : AutoCloseable {
-        private val sock = Socket().apply { connect(InetSocketAddress("127.0.0.1", CONTROL_PORT), 5000); soTimeout = 15000 }
+    internal fun quotedBridge(line: String): String {
+        require(line.isNotBlank() && line.none { it == '\r' || it == '\n' || it == '\u0000' })
+        return "\"" + line.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    }
+
+    internal fun onlyGuard(lines: List<String>, bridge: String): Boolean {
+        val wanted = bridge.split(Regex("\\s+")).firstOrNull { Regex("[0-9a-fA-F]{40}").matches(it) }
+            ?: return false
+        val circuits = lines.filter { " BUILT " in it && "PURPOSE=GENERAL" in it }
+        if (circuits.isEmpty()) return false
+        val guards = circuits.map { line ->
+            line.split(' ').firstOrNull { it.startsWith("$") }?.substringBefore(',')
+                ?.removePrefix("$")?.substringBefore('~')?.substringBefore('=')?.uppercase(java.util.Locale.ROOT)
+                ?.takeIf { Regex("[0-9A-F]{40}").matches(it) } ?: return false
+        }.toSet()
+        return guards == setOf(wanted.uppercase(java.util.Locale.ROOT))
+    }
+
+    internal class Session(timeoutMs: Int = 15000) : AutoCloseable {
+        private val sock = Socket().apply {
+            try {
+                connect(InetSocketAddress("127.0.0.1", CONTROL_PORT), 3000)
+                soTimeout = timeoutMs
+            } catch (e: Exception) {
+                close()
+                throw e
+            }
+        }
         private val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
         private val writer = BufferedWriter(OutputStreamWriter(sock.getOutputStream()))
 
         fun authenticate(cookie: File) {
-            val hex = cookie.readBytes().joinToString("") { "%02x".format(it) }
+            val bytes = cookie.readBytes()
+            require(bytes.size == 32) { "invalid control cookie length" }
+            val hex = bytes.joinToString("") { "%02x".format(it) }
             command("AUTHENTICATE $hex")
+        }
+
+        fun bootstrapProgress(): Int? = command("GETINFO status/bootstrap-phase")
+            .firstNotNullOfOrNull { Regex("PROGRESS=(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { p -> p in 0..100 } }
+
+        fun usesOnly(bridge: String): Boolean = onlyGuard(command("GETINFO circuit-status"), bridge)
+
+        /** Replaces the bridge list; never closes a circuit or resets a bootstrapped daemon. */
+        fun replaceBridge(bridge: String) {
+            command("SETCONF Bridge=${quotedBridge(bridge)}")
         }
 
         /** Sends one command and returns the payload lines (multi-line "+" blocks are flattened). */
@@ -129,22 +162,12 @@ internal object ShieldTorControl {
                     continue
                 }
                 if (line.length >= 4 && line[3] == '-') { out += line.substring(4); continue }
-                if (line.startsWith("250")) return out
+                if (line.startsWith("250 ")) {
+                    line.substring(4).takeUnless { it == "OK" }?.let { out += it }
+                    return out
+                }
                 throw IllegalStateException("control error: $line")
             }
-        }
-
-        /** Closes every built circuit so existing streams cannot keep the old exit. */
-        fun closeBuiltCircuits() {
-            val ids = command("GETINFO circuit-status")
-                .filter { " BUILT " in it }
-                .mapNotNull { it.trim().split(" ").firstOrNull()?.takeIf { id -> id.all(Char::isDigit) } }
-            for (id in ids) {
-                try { command("CLOSECIRCUIT $id") } catch (e: Exception) {
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: CLOSECIRCUIT $id failed: $e")
-                }
-            }
-            LogUtil.w(AppConfig.TAG, "ShieldTorControl: closed ${ids.size} circuits")
         }
 
         /** Country codes currently in GETCONF ExitNodes. */
@@ -161,7 +184,7 @@ internal object ShieldTorControl {
                 ?.takeIf { it.length == 40 } ?: return null
             val ip = ipOf(fp) ?: return null
             val cc = command("GETINFO ip-to-country/$ip").firstOrNull()?.substringAfter("=")?.trim()?.uppercase() ?: return null
-            return cc.takeIf { it.length == 2 }
+            return countryCode(cc)
         }
 
         /** Relay IP: ns/id, then desc/id, then a scan of ns/all (some Tor builds reject ns/id). */
