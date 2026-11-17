@@ -1702,11 +1702,16 @@ object AetherCoreManager {
             appendLine("ReducedConnectionPadding 1")
             appendLine("FetchUselessDescriptors 0")
             appendLine("DownloadExtraInfo 0")
+            if (bridges.size >= 2) {
+                appendLine("NumEntryGuards 2")
+                appendLine("NumPrimaryGuards 2")
+                appendLine("ConfluxClientUX throughput")
+            }
             appendLine("DataDirectory ${File(dir, "data").absolutePath}")
             appendLine("RunAsDaemon 0")
             appendLine("ClientOnly 1")
             appendLine("AvoidDiskWrites 0")
-            appendLine("SocksPort $listener")
+            appendLine("SocksPort $listener IsolateDestAddr")
             appendLine("ControlPort 127.0.0.1:${ShieldTorControl.CONTROL_PORT}")
             appendLine("CookieAuthentication 1")
             appendLine("SafeLogging 1")
