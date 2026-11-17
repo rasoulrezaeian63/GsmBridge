@@ -26,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -62,7 +63,7 @@ internal fun TigerProgressDialog(
 ) {
     val target = if (ready) 100 else (parseTorPercent(step) ?: 0)
     // shown percent only moves forward, at a bounded pace, so it never jumps to 100
-    var shown by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var shown by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0) }
     LaunchedEffect(target) {
         while (shown < target) {
             shown++
