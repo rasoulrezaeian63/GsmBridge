@@ -1,0 +1,59 @@
+--------- beginning of main
+11-17 12:21:13.067 I/UAC-TOR (12402): Starting Tor with 8 WebTunnel bridge(s) batch=1/3 fragment=false reuse=false
+11-17 12:21:13.080 I/UAC-TOR (12402): Verifying torrc
+11-17 12:21:13.117 I/UAC-TOR (12402): torrc verify exit=0
+11-17 12:21:13.118 D/UAC-TOR (12402): Nov 17 12:21:13.102 [notice] Tor 0.4.9.11 (git-6f92535377551fef) running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.7, Zlib 1.3.2, Liblzma N/A, Libzstd 1.5.7 and Unknown N/A as libc.
+11-17 12:21:13.119 D/UAC-TOR (12402): Nov 17 12:21:13.102 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+11-17 12:21:13.120 D/UAC-TOR (12402): Nov 17 12:21:13.102 [notice] Read configuration file "/data/user/0/com.uacspoofer.mobile/files/tor/torrc-defaults".
+11-17 12:21:13.120 D/UAC-TOR (12402): Nov 17 12:21:13.102 [notice] Read configuration file "/data/user/0/com.uacspoofer.mobile/files/tor/torrc".
+11-17 12:21:13.121 D/UAC-TOR (12402): Configuration was valid
+11-17 12:21:13.121 I/UAC-TOR (12402): Tor JNI argv tor --RunAsDaemon 0 -f /data/user/0/com.uacspoofer.mobile/files/tor/torrc --defaults-torrc /data/user/0/com.uacspoofer.mobile/files/tor/torrc-defaults --ignore-missing-torrc --SyslogIdentityTag UacTor --CacheDirectory /data/user/0/com.uacspoofer.mobile/files/tor/cache --DataDirectory /data/user/0/com.uacspoofer.mobile/files/tor/data --ControlSocket /data/user/0/com.uacspoofer.mobile/files/tor/data/ControlSocket --CookieAuthentication 0 --LogMessageDomains 1 --TruncateLogFile 1
+11-17 12:21:13.123 I/UAC-TOR (12402): Tor JNI started socks=127.0.0.1:19050 bridges=8 plugin=/data/app/~~I0GAVz_umMHJsKOSmnFfOQ==/com.uacspoofer.mobile-K3I0IstzduaRwp0q_6qnlw==/lib/arm64/libwebtunnel.so
+11-17 12:21:13.130 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {GENERAL} Tor 0.4.9.11 (git-6f92535377551fef) running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.7, Zlib 1.3.2, Liblzma N/A, Libzstd 1.5.7 and Unknown N/A as libc.
+11-17 12:21:13.130 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {GENERAL} Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+11-17 12:21:13.130 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {CONFIG} Read configuration file "/data/user/0/com.uacspoofer.mobile/files/tor/torrc-defaults".
+11-17 12:21:13.130 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {CONFIG} Read configuration file "/data/user/0/com.uacspoofer.mobile/files/tor/torrc".
+11-17 12:21:13.136 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {NET} Opening Socks listener on 127.0.0.1:19060
+11-17 12:21:13.136 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {NET} Opened Socks listener connection (ready) on 127.0.0.1:19060
+11-17 12:21:13.136 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {NET} Opening Control listener on 127.0.0.1:19051
+11-17 12:21:13.136 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {NET} Opened Control listener connection (ready) on 127.0.0.1:19051
+11-17 12:21:13.136 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {NET} Opening Control listener on /data/user/0/com.uacspoofer.mobile/files/tor/data/ControlSocket
+11-17 12:21:13.136 I/GoLog   (12402): Nov 17 12:21:13.000 [notice] {NET} Opened Control listener connection (ready) on /data/user/0/com.uacspoofer.mobile/files/tor/data/ControlSocket
+11-17 12:21:13.277 D/UAC-TOR (12402): Nov 17 12:21:13.000 [notice] Tor 0.4.9.11 (git-6f92535377551fef) opening new log file.
+11-17 12:21:13.278 D/UAC-TOR (12402): Nov 17 12:21:13.000 [notice] {GENERAL} Parsing GEOIP IPv4 file /data/user/0/com.uacspoofer.mobile/files/tor/geoip.
+11-17 12:21:14.596 D/UAC-TOR (12402): Nov 17 12:21:13.000 [notice] {GENERAL} Parsing GEOIP IPv6 file /data/user/0/com.uacspoofer.mobile/files/tor/geoip6.
+11-17 12:21:14.597 D/UAC-TOR (12402): Nov 17 12:21:13.000 [notice] {CONTROL} Bootstrapped 0% (starting): Starting
+11-17 12:21:14.597 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {GUARD} Starting with guard context "bridges"
+11-17 12:21:14.599 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {DIR} Delaying directory fetches: No running bridges
+11-17 12:21:14.600 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {DIR} new bridge descriptor 'WTBrOVJn5beXto' (cached): $1E242C749707B4A68A269F0D31311CE36CDFEC28~WTBrOVJn5beXto [fUQu0f1YCms0ucCQlA0+7ErPN4gnPxzozQ8nRJOmi/I] at 192.0.2.223
+11-17 12:21:14.601 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {DIR} new bridge descriptor 'whiskey04' (cached): $A6A5AF5E8410EB76647925F66AB2B5810A2C3791~whiskey04 [qVjmTnNp2ukRiEv0+qwO2xn7SP2pI0xFHFtlnMyXQbI] at 192.0.2.178
+11-17 12:21:14.602 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {DIR} new bridge descriptor 'ams1' (cached): $B80A80398FDE7F94C6C72F9429D8EA128663B780~ams1 [2UnPkONMFEZE4i7ptk1XO8qqM3dvYeUmuNzhVbyY8qc] at 192.0.2.81
+11-17 12:21:14.602 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {DIR} new bridge descriptor 'limettebridge' (cached): $C9AB6F207432161589F1B994F44FFE28FBF211E2~limettebridge [+XpwJsrJY1YozFKFP797srOAKhDtQ6PKf7xtf0bioIw] at 192.0.2.149
+11-17 12:21:14.603 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {CONFIG} Bridge 'CloudRelay42' has both an IPv4 and an IPv6 address.  Will prefer using its IPv4 address (192.0.2.79:443) based on the configured Bridge address.
+11-17 12:21:14.604 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {DIR} new bridge descriptor 'CloudRelay42' (cached): $5AA94C138A5B9CCDB96EA0C7D6C587AF18230158~CloudRelay42 [jAgMFS4be8ESi/gltO72f5tEf3YYbuLqqyhSS85McgQ] at 192.0.2.79 and [2a01:239:44f:6e00::1]
+11-17 12:21:14.604 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {DIR} new bridge descriptor 'Baerchen2' (cached): $B21C146831B809CE3207F177CE39E6CA5460627E~Baerchen2 [3apz7y7/pwI8LX9hE8DsHGIPS8zMnHANS/ONVwCIZcc] at 192.0.2.226
+11-17 12:21:14.605 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {CONTROL} New control connection opened from 127.0.0.1.
+11-17 12:21:14.605 D/UAC-TOR (12402): Nov 17 12:21:14.000 [notice] {CONTROL} New control connection opened.
+11-17 12:21:15.664 D/UAC-TOR (12402): Nov 17 12:21:15.000 [notice] {CONFIG} Bridge 'CloudRelay42' has both an IPv4 and an IPv6 address.  Will prefer using its IPv4 address (192.0.2.79:443) based on the configured Bridge address.
+11-17 12:21:15.666 D/UAC-TOR (12402): Nov 17 12:21:15.000 [notice] {DIR} Our directory information is no longer up-to-date enough to build circuits: We're missing descriptors for 1/3 of our primary entry guards (total microdescriptors: 9603/9603). That's ok. We will try to fetch missing descriptors soon.
+11-17 12:21:15.666 D/UAC-TOR (12402): Nov 17 12:21:15.000 [warn] {NET} No lists of TLS groups were supported. Using library defaults
+11-17 12:21:15.667 D/UAC-TOR (12402): Nov 17 12:21:15.000 [notice] {CONTROL} Bootstrapped 1% (conn_pt): Connecting to pluggable transport
+11-17 12:21:15.668 D/UAC-TOR (12402): Nov 17 12:21:15.000 [notice] {CONTROL} Bootstrapped 2% (conn_done_pt): Connected to pluggable transport
+11-17 12:21:15.978 D/UAC-TOR (12402): Nov 17 12:21:15.000 [notice] {CONTROL} Bootstrapped 10% (conn_done): Connected to a relay
+11-17 12:21:16.139 D/UAC-TOR (12402): Nov 17 12:21:15.000 [notice] {CONTROL} Bootstrapped 14% (handshake): Handshaking with a relay
+11-17 12:21:16.292 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {CONTROL} Bootstrapped 15% (handshake_done): Handshake with a relay done
+11-17 12:21:16.292 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {CONTROL} Bootstrapped 20% (onehop_create): Establishing an encrypted directory connection
+11-17 12:21:16.293 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {CONTROL} Bootstrapped 25% (requesting_status): Asking for networkstatus consensus
+11-17 12:21:16.446 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {CONFIG} Bridge 'CloudRelay42' has both an IPv4 and an IPv6 address.  Will prefer using its IPv4 address (192.0.2.79:443) based on the configured Bridge address.
+11-17 12:21:16.446 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {DIR} new bridge descriptor 'imgcdn3' (fresh): $8A1EE5824071CA39E7D76BD579FB2AEF2B52E524~imgcdn3 [mdN88ZiO7eLn3h52aWQXvTV+9V1t2FwmUn0xYb4zHqM] at 192.0.2.216
+11-17 12:21:16.447 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {DIR} new bridge descriptor 'WTBrlcaFUb5NJj' (fresh): $770EA6412C8D3997ABFFF7173A3E53F1D3660167~WTBrlcaFUb5NJj [G6J3fNC6WGVoBcoDh8Q7PgU6kBqWJXamxQvYs7YXFlE] at 192.0.2.105
+11-17 12:21:16.943 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {CONTROL} Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build circuits
+11-17 12:21:16.943 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {DIR} We now have enough directory information to build circuits.
+11-17 12:21:16.944 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {CONTROL} Bootstrapped 90% (ap_handshake_done): Handshake finished with a relay to build circuits
+11-17 12:21:16.945 D/UAC-TOR (12402): Nov 17 12:21:16.000 [notice] {CONTROL} Bootstrapped 95% (circuit_create): Establishing a Tor circuit
+11-17 12:21:17.268 I/UAC-TOR (12402): Tor is using bridge ams1.cryptomeanscryptography.club
+11-17 12:21:17.566 I/UAC-TOR (12402): DomesticSocksSplit listen=19050 upstream=19060
+11-17 12:21:17.598 I/UAC-TOR (12402): Tor tun2socks TUN started
+11-17 12:21:17.600 I/UAC-TOR (12402): Tor engine connected mode=tunnel bridge=ams1.cryptomeanscryptography.club bootstrap=10924ms warm=true fragment=false
+11-17 12:21:17.610 I/UAC-TOR (12402): Tor / WebTunnel engine is active
+11-17 12:21:28.455 I/UAC-TOR (12402): Bridge ams1.cryptomeanscryptography.club throughput 270 KB/s

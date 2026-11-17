@@ -435,7 +435,7 @@ object AetherCoreManager {
             torBind?.let { addAll(listOf(TOR_BIND, "${AppConfig.LOOPBACK}:$it")) }
             if (tor != AetherTor.OFF) {
                 // GsmBridge: Tor always goes through webtunnel bridges, whatever the profile says.
-                ShieldBridgeRanker.pick(WebtunnelBridges.LINES, 12).forEach { addAll(listOf("--tor-bridge", it)) }
+                ShieldBridgeRanker.pick(WebtunnelBridges.LINES, 8).forEach { addAll(listOf("--tor-bridge", it)) }
             }
 
             if (tor != AetherTor.OFF) (settingValue(MmkvManager.decodeSettingsString(PREF_SHIELD_EXIT)?.takeIf { MmkvManager.decodeSettingsBool(PREF_SHIELD_TUNNEL, true) }) ?: settingValue(profile.aetherTorExit))?.let { addAll(listOf("--tor-exit", it)) }
@@ -1688,8 +1688,8 @@ object AetherCoreManager {
         val listener = listenerAddressOf(arguments) ?: "127.0.0.1:${DEFAULT_SHIELD_PORT}"
         val dir = File(context.filesDir, "shield-tor").apply { mkdirs() }
         val rc = File(dir, "torrc")
-        val bridges = ShieldBridgeRanker.pick(WebtunnelBridges.LINES, 12)
-        val fragPort = try { shieldFrag?.stop(); ShieldFragmentProxy(5, 0, true, 262144).also { shieldFrag = it }.start() } catch (e: Exception) { LogUtil.w(AppConfig.TAG, "ShieldTor: fragment proxy failed: $e"); 0 }
+        val bridges = ShieldBridgeRanker.pick(WebtunnelBridges.LINES, 8)
+        val fragPort = if (!SHIELD_FRAGMENT) 0 else try { shieldFrag?.stop(); ShieldFragmentProxy(5, 0, true, 262144).also { shieldFrag = it }.start() } catch (e: Exception) { LogUtil.w(AppConfig.TAG, "ShieldTor: fragment proxy failed: $e"); 0 }
         val geo = installGeoIp(context, File(context.filesDir, "tor").apply { mkdirs() })
         rc.writeText(buildString {
             if (geo != null) {
@@ -1702,11 +1702,6 @@ object AetherCoreManager {
             appendLine("ReducedConnectionPadding 1")
             appendLine("FetchUselessDescriptors 0")
             appendLine("DownloadExtraInfo 0")
-            if (bridges.size >= 2) {
-                appendLine("NumEntryGuards 2")
-                appendLine("NumPrimaryGuards 2")
-                appendLine("ConfluxClientUX throughput")
-            }
             appendLine("DataDirectory ${File(dir, "data").absolutePath}")
             appendLine("RunAsDaemon 0")
             appendLine("ClientOnly 1")
@@ -1781,6 +1776,8 @@ object AetherCoreManager {
     }
 
     private const val DEFAULT_SHIELD_PORT = 1819
+    /** Off: with it on, Tor stuck at 0% on this build (PT likely ignores Socks5Proxy). */
+    private const val SHIELD_FRAGMENT = false
     @Volatile private var shieldFrag: ShieldFragmentProxy? = null
 
     /** Tor's geoip files (needed for ExitNodes {CC}), unpacked from assets/tor like UAC does. */
