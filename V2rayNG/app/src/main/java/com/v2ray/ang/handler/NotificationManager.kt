@@ -106,7 +106,7 @@ object NotificationManager {
 
         mBuilder = NotificationCompat.Builder(service, channelId)
             .setSmallIcon(R.drawable.ic_stat_name)
-            .setContentTitle(currentConfig?.remarks ?: service.getString(R.string.app_name))
+            .setContentTitle(exitTitle(service))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setShowWhen(false)
@@ -232,13 +232,17 @@ object NotificationManager {
      * @param down The downlink speed.
      */
     private fun appendSpeedString(text: StringBuilder, name: String?, up: Double, down: Double) {
-        var n = name ?: "no tag"
-        n = n.take(min(n.length, 6))
-        text.append(n)
-        for (i in n.length..6 step 2) {
-            text.append("\t")
-        }
-        text.append("•  ${up.toLong().toSpeedString()}↑  ${down.toLong().toSpeedString()}↓\n")
+        if (name == AppConfig.TAG_DIRECT) return
+        text.append("↓ ${down.toLong().toSpeedString()}    ↑ ${up.toLong().toSpeedString()}\n")
+    }
+
+    /** Notification title: flag and name of the selected exit country, never "Tor". */
+    private fun exitTitle(service: Service): String {
+        val code = MmkvManager.decodeSettingsString(com.v2ray.ang.core.AetherCoreManager.PREF_SHIELD_EXIT)
+        if (code.isNullOrBlank() || code.length != 2) return service.getString(R.string.app_name)
+        val flag = code.uppercase().map { String(Character.toChars(0x1F1E6 + (it - 'A'))) }.joinToString("")
+        val name = com.v2ray.ang.ui.main.ShieldCountries.nameOf(code, java.util.Locale.getDefault())
+        return "$flag $name"
     }
 
     /**

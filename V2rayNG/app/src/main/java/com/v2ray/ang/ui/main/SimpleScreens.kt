@@ -309,7 +309,10 @@ private suspend fun requestFreeTest(ctx: Context): Triple<String?, Boolean, Stri
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("X-App-Secret", com.v2ray.ang.FreeTestConfig.APP_SECRET)
             conn.outputStream.use { it.write("{\"device_id\":\"$id\"}".toByteArray()) }
-            if (conn.responseCode != 200) return@withContext Triple(null, false, "HTTP " + conn.responseCode)
+            if (conn.responseCode != 200) {
+                val err = try { conn.errorStream?.bufferedReader()?.readText().orEmpty().take(80) } catch (_: Exception) { "" }
+                return@withContext Triple(null, false, "HTTP " + conn.responseCode + " " + err)
+            }
             val body = conn.inputStream.bufferedReader().readText()
             val o = org.json.JSONObject(body)
             val sub = o.optString("sub")
@@ -391,6 +394,13 @@ internal fun SimpleHomeScreen(
             .phonixBackground(c)
             .systemBarsPadding(),
     ) {
+        var showTiger by remember { mutableStateOf(false) }
+        LaunchedEffect(isStarting, isRunning) {
+            if (isStarting) showTiger = true else if (!isRunning) showTiger = false
+        }
+        if (showTiger) {
+            TigerProgressDialog(c, statusText, ready = isRunning && !isStarting, failed = false, onClose = { showTiger = false })
+        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -619,7 +629,10 @@ private fun ConnectionTab(
             }
         }
         Spacer(Modifier.height(12.dp))
-        var showIp by remember { mutableStateOf(true) }
+        val pingScope = rememberCoroutineScope()
+        var livePing by remember { mutableStateOf(0L) }
+        var pinging by remember { mutableStateOf(false) }
+        LaunchedEffect(isRunning, pingMs) { livePing = 0L }
         var ipInfo by remember { mutableStateOf("") }
         LaunchedEffect(isRunning, pingMs > 0L) {
             if (!isRunning) { ipInfo = ""; return@LaunchedEffect }
@@ -641,20 +654,31 @@ private fun ConnectionTab(
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Surface(
-                modifier = Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).clickable { showIp = !showIp },
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(24.dp)),
                 shape = RoundedCornerShape(24.dp), color = c.card,
             ) {
                 Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(locationName, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (showIp) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(if (isRunning) ipInfo else "—", color = c.subText, fontSize = 12.sp)
-                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(if (isRunning) ipInfo else "—", color = c.subText, fontSize = 12.sp)
                 }
             }
-            Surface(shape = RoundedCornerShape(24.dp), color = c.card) {
+            val shownPing = if (livePing > 0L) livePing else pingMs
+            Surface(
+                modifier = Modifier.clip(RoundedCornerShape(24.dp)).clickable(enabled = isRunning && !pinging) {
+                    pinging = true
+                    pingScope.launch {
+                        val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            com.v2ray.ang.core.AetherCoreManager.torPing()
+                        }
+                        if (r > 0L) livePing = r
+                        pinging = false
+                    }
+                },
+                shape = RoundedCornerShape(24.dp), color = c.card,
+            ) {
                 Text(
-                    text = "\u26A1 " + if (pingMs > 0L) "$pingMs ms" else "\u2014 ms",
+                    text = if (pinging) "\u26A1 ..." else "\u26A1 " + if (shownPing > 0L) "$shownPing ms" else "\u2014 ms",
                     color = c.accent, fontSize = 16.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                 )
@@ -673,20 +697,18 @@ private fun SpeedCard(c: UiColors, icon: Int, label: String, bytesPerSecond: Lon
         shadowElevation = 3.dp,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp, horizontal = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(painter = painterResource(icon), contentDescription = null, modifier = Modifier.size(30.dp), tint = c.accent)
-            Spacer(Modifier.height(6.dp))
+            Icon(painter = painterResource(icon), contentDescription = null, modifier = Modifier.size(20.dp), tint = c.accent)
             Text(
                 text = bytesPerSecond.coerceAtLeast(0L).toTrafficString() + "/s",
                 color = c.text,
-                fontSize = 18.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
             )
-            Spacer(Modifier.height(4.dp))
-            Text(text = label, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(text = label, color = c.text, fontSize = 11.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

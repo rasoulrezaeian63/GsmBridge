@@ -265,7 +265,7 @@ object PhonixPolicy {
         val saved = MmkvManager.decodeSettingsString(PREF_TOR_PROFILE)
         if (!saved.isNullOrEmpty() && MmkvManager.decodeServerConfig(saved) != null) return saved
         val profile = ProfileItem.create(EConfigType.SOCKS)
-        profile.remarks = "GsmBridge Tor"
+        profile.remarks = "GsmBridge"
         profile.server = "127.0.0.1"
         profile.serverPort = "1819"
         val guid = MmkvManager.encodeServerConfig("", profile)
