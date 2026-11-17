@@ -12,8 +12,9 @@ import java.net.Socket
 
 /**
  * Post-bootstrap check through Tor's ControlPort, modelled on UAC's TorExitCountry:
- * GETCONF ExitNodes -> re-apply with SETCONF if needed -> inspect the built exit -> NEWNYM and retry on mismatch.
- * Everything is checked with Tor's own GeoIP (ip-to-country), so no external site is involved.
+ * GETCONF ExitNodes -> re-apply with SETCONF if needed -> observe built circuits.
+ * A built circuit is not proof of the exit used by an application's stream. Observations
+ * must never tear down active circuits or trigger repeated NEWNYM requests.
  */
 internal object ShieldTorControl {
     const val CONTROL_PORT = 1822
@@ -21,34 +22,37 @@ internal object ShieldTorControl {
     private const val MAX_ATTEMPTS = 5
 
     fun verifyExit(dir: File, wanted: String?) {
-        LogUtil.w(AppConfig.TAG, "ShieldTorControl: start, wanted=$wanted")
-        if (wanted == null) return
+        val country = countryCode(wanted) ?: return
+        LogUtil.w(AppConfig.TAG, "ShieldTorControl: observe requested country=$country")
         val cookie = File(dir, COOKIE_NAME)
         try {
             Session().use { s ->
                 s.authenticate(cookie)
                 // Re-apply the country rule in case the running Tor drifted from torrc.
-                if (!s.getConfExits().contains(wanted)) {
-                    s.command("SETCONF ExitNodes={$wanted} StrictNodes=1")
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: re-applied ExitNodes {$wanted}")
+                if (!s.getConfExits().contains(country)) {
+                    s.command("SETCONF ExitNodes={$country} StrictNodes=1")
+                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: re-applied ExitNodes {$country}")
                 }
                 for (attempt in 1..MAX_ATTEMPTS) {
                     val actual = s.currentExitCountry()
-                    if (actual == wanted) {
-                        LogUtil.w(AppConfig.TAG, "ShieldTorControl: exit verified $actual (attempt $attempt)")
+                    if (actual == country) {
+                        LogUtil.w(AppConfig.TAG, "ShieldTorControl: built circuit country=$actual (not stream verification)")
                         return
                     }
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: exit is ${actual ?: "unknown"}, want $wanted; NEWNYM (attempt $attempt)")
-                    s.closeBuiltCircuits()
-                    s.command("SIGNAL NEWNYM")
-                    Thread.sleep(3000)
+                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: observed ${actual ?: "unknown"}, want $country; preserving circuits (attempt $attempt)")
+                    if (attempt < MAX_ATTEMPTS) Thread.sleep(3000)
                 }
-                LogUtil.w(AppConfig.TAG, "ShieldTorControl: could not get an exit in $wanted after $MAX_ATTEMPTS attempts")
+                LogUtil.w(AppConfig.TAG, "ShieldTorControl: requested country not observed; no circuits closed")
             }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
         } catch (e: Exception) {
             LogUtil.w(AppConfig.TAG, "ShieldTorControl: check failed: $e")
         }
     }
+
+    internal fun countryCode(value: String?): String? = value?.trim()?.uppercase(java.util.Locale.ROOT)
+        ?.takeIf { Regex("[A-Z]{2}").matches(it) }
 
     private const val MIDDLE_COUNT = 60
     private const val MIN_USABLE = 10
@@ -134,19 +138,6 @@ internal object ShieldTorControl {
             }
         }
 
-        /** Closes every built circuit so existing streams cannot keep the old exit. */
-        fun closeBuiltCircuits() {
-            val ids = command("GETINFO circuit-status")
-                .filter { " BUILT " in it }
-                .mapNotNull { it.trim().split(" ").firstOrNull()?.takeIf { id -> id.all(Char::isDigit) } }
-            for (id in ids) {
-                try { command("CLOSECIRCUIT $id") } catch (e: Exception) {
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: CLOSECIRCUIT $id failed: $e")
-                }
-            }
-            LogUtil.w(AppConfig.TAG, "ShieldTorControl: closed ${ids.size} circuits")
-        }
-
         /** Country codes currently in GETCONF ExitNodes. */
         fun getConfExits(): Set<String> =
             command("GETCONF ExitNodes").joinToString(" ").let { Regex("[A-Z]{2}").findAll(it).map { m -> m.value }.toSet() }
@@ -161,7 +152,7 @@ internal object ShieldTorControl {
                 ?.takeIf { it.length == 40 } ?: return null
             val ip = ipOf(fp) ?: return null
             val cc = command("GETINFO ip-to-country/$ip").firstOrNull()?.substringAfter("=")?.trim()?.uppercase() ?: return null
-            return cc.takeIf { it.length == 2 }
+            return countryCode(cc)
         }
 
         /** Relay IP: ns/id, then desc/id, then a scan of ns/all (some Tor builds reject ns/id). */

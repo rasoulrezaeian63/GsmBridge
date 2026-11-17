@@ -1702,16 +1702,11 @@ object AetherCoreManager {
             appendLine("ReducedConnectionPadding 1")
             appendLine("FetchUselessDescriptors 0")
             appendLine("DownloadExtraInfo 0")
-            if (bridges.size >= 2) {
-                appendLine("NumEntryGuards 2")
-                appendLine("NumPrimaryGuards 2")
-                appendLine("ConfluxClientUX throughput")
-            }
             appendLine("DataDirectory ${File(dir, "data").absolutePath}")
             appendLine("RunAsDaemon 0")
             appendLine("ClientOnly 1")
             appendLine("AvoidDiskWrites 0")
-            appendLine("SocksPort $listener IsolateDestAddr")
+            appendLine("SocksPort $listener")
             appendLine("ControlPort 127.0.0.1:${ShieldTorControl.CONTROL_PORT}")
             appendLine("CookieAuthentication 1")
             appendLine("SafeLogging 1")
@@ -1744,8 +1739,8 @@ object AetherCoreManager {
                 appendLine("StrictNodes 1")
             } else {
                 shieldWantedExit = null
-                // Smart Connect: prefer exits in fast, well-connected countries; Tor picks the best by bandwidth; falls back to any exit.
-                appendLine("ExitNodes " + listOf("DE", "NL", "SE", "CH", "FR", "AT", "FI", "NO", "GB", "US", "CA", "RO").joinToString(",") { "{$it}" })
+                // Like UAC with fastExit disabled: let Tor select exits without a country shortlist.
+                // Country geography alone is not a throughput or latency measurement.
                 appendLine("StrictNodes 0")
             }
             bridges.forEach { appendLine("Bridge $it") }
@@ -1773,7 +1768,7 @@ object AetherCoreManager {
                 Thread.sleep(1000)
             }
             LogUtil.w(AppConfig.TAG, "ShieldTorControl: bootstrap done alive=${started.isAlive} ready=${torReady.value}")
-            // Bootstrapped: confirm through ControlPort that the exit really is in the chosen country.
+            // Bootstrap: observe a built circuit, without claiming stream-specific exit verification.
             if (started.isAlive && torReady.value) ShieldTorControl.applyFastMiddles(File(dir, "data"))
             if (started.isAlive && torReady.value) ShieldTorControl.verifyExit(File(dir, "data"), shieldWantedExit)
         }
