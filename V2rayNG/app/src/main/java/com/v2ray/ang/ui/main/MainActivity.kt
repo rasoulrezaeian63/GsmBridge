@@ -204,6 +204,10 @@ class MainActivity : HelperBaseComponentActivity() {
             val torReady by com.v2ray.ang.core.AetherCoreManager.torReady.collectAsStateWithLifecycle()
             val torBusy = uiState.isRunning && !torReady
             LaunchedEffect(uiState.isRunning) {
+                if (!uiState.isRunning) {
+                    com.v2ray.ang.core.AetherCoreManager.torReady.value = false
+                    com.v2ray.ang.core.AetherCoreManager.torStep.value = ""
+                }
                 if (uiState.isRunning) {
                     com.v2ray.ang.core.AetherCoreManager.torReady.value = false
                     while (!com.v2ray.ang.core.AetherCoreManager.torReady.value) {
@@ -387,6 +391,9 @@ class MainActivity : HelperBaseComponentActivity() {
 
     private fun startV2Ray() {
         PhonixPolicy.applySelection()
+        // A new session must not see the previous one's finished Tor state
+        com.v2ray.ang.core.AetherCoreManager.torReady.value = false
+        runCatching { java.io.File(java.io.File(filesDir, "shield-tor"), "tor.log").delete() }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN
         ) {
             checkAndRequestPermission(PermissionType.ACCESS_LOCAL_NETWORK) {}

@@ -47,14 +47,15 @@ object NotificationManager {
     fun setStatusLine(text: String?) {
         statusLine = text
         val builder = mBuilder ?: return
-        val content = composeContentText()
+        val content = composeContentText() ?: " "
         builder.setStyle(NotificationCompat.BigTextStyle().bigText(content))
         builder.setContentText(content)
         getNotificationManager()?.notify(NOTIFICATION_ID, builder.build())
+        if (text == null) startSpeedNotification()
     }
 
     private fun composeContentText(): String? =
-        listOfNotNull(statusLine, lastContentText?.takeIf { it.isNotEmpty() })
+        listOfNotNull(statusLine, lastContentText?.takeIf { it.isNotBlank() })
             .joinToString("\n")
             .ifEmpty { null }
 
@@ -63,7 +64,6 @@ object NotificationManager {
      * @param currentConfig The current profile configuration.
      */
     fun startSpeedNotification() {
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_SPEED_ENABLED) != true) return
         if (speedNotificationJob != null || CoreServiceManager.isRunning() == false) return
 
         var lastZeroSpeed = false
