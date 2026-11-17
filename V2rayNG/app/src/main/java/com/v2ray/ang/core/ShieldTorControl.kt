@@ -21,33 +21,29 @@ internal object ShieldTorControl {
     const val COOKIE_NAME = "control_auth_cookie"
     private const val MAX_ATTEMPTS = 5
 
-    fun verifyExit(dir: File, wanted: String?) {
+    fun verifyExit(s: Session, wanted: String?, active: () -> Boolean) {
         val country = countryCode(wanted) ?: return
-        LogUtil.w(AppConfig.TAG, "ShieldTorControl: observe requested country=$country")
-        val cookie = File(dir, COOKIE_NAME)
         try {
-            Session().use { s ->
-                s.authenticate(cookie)
-                // Re-apply the country rule in case the running Tor drifted from torrc.
-                if (!s.getConfExits().contains(country)) {
-                    s.command("SETCONF ExitNodes={$country} StrictNodes=1")
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: re-applied ExitNodes {$country}")
+            if (!active()) return
+            if (!s.getConfExits().contains(country)) {
+                if (!active()) return
+                s.command("SETCONF ExitNodes={$country} StrictNodes=1")
+                LogUtil.w(AppConfig.TAG, "ShieldTorControl: re-applied ExitNodes {$country}")
+            }
+            for (attempt in 1..MAX_ATTEMPTS) {
+                if (!active()) return
+                val actual = s.currentExitCountry()
+                if (actual == country) {
+                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: built circuit country=$actual (not stream verification)")
+                    return
                 }
-                for (attempt in 1..MAX_ATTEMPTS) {
-                    val actual = s.currentExitCountry()
-                    if (actual == country) {
-                        LogUtil.w(AppConfig.TAG, "ShieldTorControl: built circuit country=$actual (not stream verification)")
-                        return
-                    }
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: observed ${actual ?: "unknown"}, want $country; preserving circuits (attempt $attempt)")
-                    if (attempt < MAX_ATTEMPTS) Thread.sleep(3000)
-                }
-                LogUtil.w(AppConfig.TAG, "ShieldTorControl: requested country not observed; no circuits closed")
+                LogUtil.w(AppConfig.TAG, "ShieldTorControl: observed ${actual ?: "unknown"}, want $country; preserving circuits (attempt $attempt)")
+                if (attempt < MAX_ATTEMPTS) Thread.sleep(3000)
             }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         } catch (e: Exception) {
-            LogUtil.w(AppConfig.TAG, "ShieldTorControl: check failed: $e")
+            if (active()) LogUtil.w(AppConfig.TAG, "ShieldTorControl: check failed (${e.javaClass.simpleName})")
         }
     }
 
@@ -58,20 +54,15 @@ internal object ShieldTorControl {
     private const val MIN_USABLE = 10
 
     /** Pins MiddleNodes to the fastest Fast+Stable relays (as UAC's TorFastRelays does). */
-    fun applyFastMiddles(dir: File) {
+    fun applyFastMiddles(s: Session, active: () -> Boolean) {
         try {
-            Session().use { s ->
-                s.authenticate(File(dir, COOKIE_NAME))
-                val fps = pickMiddles(s.command("GETINFO ns/all"))
-                if (fps.size < MIN_USABLE) {
-                    LogUtil.w(AppConfig.TAG, "ShieldTorControl: only ${fps.size} fast relays, MiddleNodes unset")
-                    return
-                }
-                s.command("SETCONF MiddleNodes=" + fps.joinToString(",") { "$" + it })
-                LogUtil.w(AppConfig.TAG, "ShieldTorControl: MiddleNodes set to ${fps.size} fast relays")
-            }
+            if (!active()) return
+            val fps = pickMiddles(s.command("GETINFO ns/all"))
+            if (fps.size < MIN_USABLE || !active()) return
+            s.command("SETCONF MiddleNodes=" + fps.joinToString(",") { "$" + it })
+            LogUtil.w(AppConfig.TAG, "ShieldTorControl: MiddleNodes set to ${fps.size} fast relays")
         } catch (e: Exception) {
-            LogUtil.w(AppConfig.TAG, "ShieldTorControl: fast middles failed: $e")
+            if (active()) LogUtil.w(AppConfig.TAG, "ShieldTorControl: fast middles failed (${e.javaClass.simpleName})")
         }
     }
 
@@ -106,14 +97,52 @@ internal object ShieldTorControl {
             .sortedByDescending { it.bw }.take(MIDDLE_COUNT).map { it.fp }
     }
 
-    private class Session : AutoCloseable {
-        private val sock = Socket().apply { connect(InetSocketAddress("127.0.0.1", CONTROL_PORT), 5000); soTimeout = 15000 }
+    internal fun quotedBridge(line: String): String {
+        require(line.isNotBlank() && line.none { it == '\r' || it == '\n' || it == '\u0000' })
+        return "\"" + line.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    }
+
+    internal fun onlyGuard(lines: List<String>, bridge: String): Boolean {
+        val wanted = bridge.split(Regex("\\s+")).firstOrNull { Regex("[0-9a-fA-F]{40}").matches(it) }
+            ?: return false
+        val circuits = lines.filter { " BUILT " in it && "PURPOSE=GENERAL" in it }
+        if (circuits.isEmpty()) return false
+        val guards = circuits.map { line ->
+            line.split(' ').firstOrNull { it.startsWith("$") }?.substringBefore(',')
+                ?.removePrefix("$")?.substringBefore('~')?.substringBefore('=')?.uppercase(java.util.Locale.ROOT)
+                ?.takeIf { Regex("[0-9A-F]{40}").matches(it) } ?: return false
+        }.toSet()
+        return guards == setOf(wanted.uppercase(java.util.Locale.ROOT))
+    }
+
+    internal class Session(timeoutMs: Int = 15000) : AutoCloseable {
+        private val sock = Socket().apply {
+            try {
+                connect(InetSocketAddress("127.0.0.1", CONTROL_PORT), 3000)
+                soTimeout = timeoutMs
+            } catch (e: Exception) {
+                close()
+                throw e
+            }
+        }
         private val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
         private val writer = BufferedWriter(OutputStreamWriter(sock.getOutputStream()))
 
         fun authenticate(cookie: File) {
-            val hex = cookie.readBytes().joinToString("") { "%02x".format(it) }
+            val bytes = cookie.readBytes()
+            require(bytes.size == 32) { "invalid control cookie length" }
+            val hex = bytes.joinToString("") { "%02x".format(it) }
             command("AUTHENTICATE $hex")
+        }
+
+        fun bootstrapProgress(): Int? = command("GETINFO status/bootstrap-phase")
+            .firstNotNullOfOrNull { Regex("PROGRESS=(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { p -> p in 0..100 } }
+
+        fun usesOnly(bridge: String): Boolean = onlyGuard(command("GETINFO circuit-status"), bridge)
+
+        /** Replaces the bridge list; never closes a circuit or resets a bootstrapped daemon. */
+        fun replaceBridge(bridge: String) {
+            command("SETCONF Bridge=${quotedBridge(bridge)}")
         }
 
         /** Sends one command and returns the payload lines (multi-line "+" blocks are flattened). */
@@ -133,7 +162,10 @@ internal object ShieldTorControl {
                     continue
                 }
                 if (line.length >= 4 && line[3] == '-') { out += line.substring(4); continue }
-                if (line.startsWith("250")) return out
+                if (line.startsWith("250 ")) {
+                    line.substring(4).takeUnless { it == "OK" }?.let { out += it }
+                    return out
+                }
                 throw IllegalStateException("control error: $line")
             }
         }

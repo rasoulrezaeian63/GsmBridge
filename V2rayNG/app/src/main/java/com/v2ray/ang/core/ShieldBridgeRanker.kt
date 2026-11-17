@@ -21,9 +21,11 @@ internal object ShieldBridgeRanker {
     private const val SCAN_SECONDS = 8L
     private const val MAX_PROBES = 48
 
-    fun pick(all: List<String>, count: Int): List<String> {
+    val quality = ShieldBridgeQuality()
+
+    fun pick(all: List<String>, count: Int, qualityScope: String? = null): List<String> {
         if (count <= 0 || all.isEmpty()) return emptyList()
-        val candidates = all.distinct().shuffled()
+        val candidates = quality.order(qualityScope, all.distinct().shuffled())
         val sockets = ConcurrentHashMap.newKeySet<Socket>()
         val stopped = AtomicBoolean(false)
         val pool = Executors.newFixedThreadPool(8) { task ->
@@ -37,7 +39,7 @@ internal object ShieldBridgeRanker {
                 .mapNotNull { f -> if (f.isCancelled) null else runCatching { f.get() }.getOrNull() }
             val ok = results.filter { it.second != null }.sortedBy { it.second }.map { it.first }
             LogUtil.w(AppConfig.TAG, "ShieldTor: WebTunnel upgrades ${ok.size}/${tasks.size}")
-            select(candidates, ok, count)
+            select(candidates, quality.order(qualityScope, ok), count)
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             throw e
