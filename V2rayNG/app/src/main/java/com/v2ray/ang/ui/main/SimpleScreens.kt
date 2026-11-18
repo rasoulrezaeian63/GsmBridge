@@ -349,6 +349,7 @@ internal fun SimpleHomeScreen(
     isPersian: Boolean,
     onSelectServer: (String?) -> Unit,
     onToggle: () -> Unit,
+    onCancelConnect: () -> Unit = {},
     onUpdate: () -> Unit,
     onGetNewIp: () -> Unit,
     onSetLanguage: (String) -> Unit,
@@ -401,7 +402,8 @@ internal fun SimpleHomeScreen(
             if (isStarting) showTiger = true else if (!isRunning) showTiger = false
         }
         if (showTiger) {
-            TigerProgressDialog(c, statusText, ready = isRunning && !isStarting, failed = false, onClose = { showTiger = false })
+            TigerProgressDialog(c, statusText, ready = isRunning && !isStarting, failed = false, onClose = { showTiger = false },
+                onCancel = { showTiger = false; onCancelConnect() })
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),

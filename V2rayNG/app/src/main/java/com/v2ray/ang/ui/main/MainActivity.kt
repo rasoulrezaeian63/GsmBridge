@@ -270,6 +270,10 @@ class MainActivity : HelperBaseComponentActivity() {
                     if (setupState == PhonixProvisioner.Setup.PREPARING) toast(R.string.ui_setup_wait)
                     else handleFabAction()
                 },
+                onCancelConnect = {
+                    LauncherManager.stopService(this@MainActivity)
+                    mainViewModel.onAction(MainAction.RefreshServiceState)
+                },
                 onUpdate = { mainViewModel.onAction(MainAction.UpdateSubscriptions) },
                 onGetNewIp = {
                     if (scanning) return@SimpleHomeScreen

@@ -60,6 +60,7 @@ internal fun TigerProgressDialog(
     ready: Boolean,
     failed: Boolean,
     onClose: () -> Unit,
+    onCancel: (() -> Unit)? = null,
 ) {
     val target = if (ready) 100 else (parseTorPercent(step) ?: 0)
     // shown percent only moves forward, at a bounded pace, so it never jumps to 100
@@ -101,6 +102,15 @@ internal fun TigerProgressDialog(
                     text = if (ready) "\u2713" else step,
                     color = c.subText, fontSize = 12.sp, maxLines = 2,
                 )
+                if (!failed && !ready && onCancel != null) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = onCancel) {
+                        Text(
+                            if (java.util.Locale.getDefault().language == "fa") "انصراف و قطع اتصال" else "Cancel",
+                            color = c.accent, fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
                 if (failed) {
                     TextButton(onClick = onClose) { Text("OK", color = c.accent) }
                 }
