@@ -1021,6 +1021,9 @@ private fun MenuTab(
     onLogout: () -> Unit,
 ) {
     var confirmLogout by rememberSaveable { mutableStateOf(false) }
+    var wtBusy by remember { mutableStateOf(false) }
+    var wtMsg by remember { mutableStateOf<String?>(null) }
+    val wtScope = androidx.compose.runtime.rememberCoroutineScope()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1054,6 +1057,36 @@ private fun MenuTab(
                         if (selected) Text(text = "✓", color = c.accent, fontSize = 18.sp)
                     }
                 }
+            }
+        }
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .clickable(enabled = !wtBusy) {
+                    wtBusy = true; wtMsg = null
+                    wtScope.launch {
+                        val n = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            com.v2ray.ang.core.WebtunnelUpdater.update()
+                        }
+                        wtBusy = false
+                        wtMsg = if (n > 0) {
+                            if (isPersian) "$n بریج به‌روز شد. برای اعمال، دوباره وصل شوید." else "$n bridges updated. Reconnect to apply."
+                        } else {
+                            if (isPersian) "به‌روزرسانی ناموفق بود؛ لیست قبلی حفظ شد." else "Update failed; the previous list is kept."
+                        }
+                    }
+                },
+            shape = RoundedCornerShape(24.dp),
+            color = c.card,
+        ) {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
+                Text(
+                    text = if (wtBusy) (if (isPersian) "در حال به‌روزرسانی…" else "Updating…")
+                    else if (isPersian) "به‌روزرسانی وب‌تانل (Bridge)" else "Update WebTunnel bridges",
+                    color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                )
+                wtMsg?.let { Text(text = it, color = c.subText, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp)) }
             }
         }
         Surface(

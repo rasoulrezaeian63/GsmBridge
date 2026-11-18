@@ -2,7 +2,7 @@ package com.v2ray.ang.core
 
 /** Curated webtunnel bridges (from UAC-SNI-Spoofer-Android bridges-webtunnel.txt), used by default for Tor. */
 object WebtunnelBridges {
-    val LINES: List<String> get() = RAW.map(::ipv4)
+    val LINES: List<String> get() = (WebtunnelUpdater.saved().ifEmpty { RAW }).map(::ipv4)
 
     /** Placeholder 2001:db8 IPv6 -> TEST-NET-1 IPv4 (as UAC does); the real endpoint is url=. */
     private fun ipv4(l: String): String {

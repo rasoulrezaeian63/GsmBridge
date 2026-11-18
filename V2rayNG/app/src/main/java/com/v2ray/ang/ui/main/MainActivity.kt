@@ -123,6 +123,7 @@ class MainActivity : HelperBaseComponentActivity() {
 
         // Phonix: sets the Aether profile up, when it is not yet, for a subscription already there.
         com.v2ray.ang.core.PhonixProvisioner.kick()
+        com.v2ray.ang.core.WebtunnelUpdater.autoOnce()
 
         checkAndRequestPermission(PermissionType.POST_NOTIFICATIONS) {}
     }
