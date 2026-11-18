@@ -116,6 +116,9 @@ private fun TigerTrack(progress: Float, running: Boolean, accent: Color, trackCo
         0f, -8f,
         infiniteRepeatable(tween(220, easing = LinearEasing), RepeatMode.Reverse), label = "bob",
     )
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr,
+    ) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(110.dp)) {
         val dogW = 90.dp
         val x = (maxWidth - dogW) * progress
@@ -134,6 +137,7 @@ private fun TigerTrack(progress: Float, running: Boolean, accent: Color, trackCo
             drawRect(trackColor, Offset.Zero, size)
             drawRect(accent, Offset.Zero, Size(size.width * progress, size.height))
         }
+    }
     }
 }
 

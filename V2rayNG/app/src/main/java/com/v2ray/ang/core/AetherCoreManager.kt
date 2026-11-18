@@ -1072,7 +1072,7 @@ object AetherCoreManager {
         if (target?.nativeShield != true) return awaitReady(timeoutMs, READY_POLL_MS,
             { isRunning }, { torReady.value || session?.let { it.wordSeen && answersSocks(it.port) } == true })
         return awaitReady(maxOf(timeoutMs, ShieldBridgeQuality.START_BUDGET_MS), READY_POLL_MS,
-            { session === target && isRunning }, { session === target && target.wordSeen && answersSocks(target.port) })
+            { session === target && isRunning }, { session === target && (torReady.value || (target.wordSeen && answersSocks(target.port))) })
     }
 
     internal suspend fun awaitReady(
