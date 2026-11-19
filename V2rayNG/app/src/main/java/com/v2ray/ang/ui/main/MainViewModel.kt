@@ -672,6 +672,8 @@ class MainViewModel(
                         if (item.url.isBlank()) dataSource.updateConfigViaSubAll()
                         else dataSource.updateConfigViaSub(SubscriptionCache(subId, item))
                     }
+                    if (result.failureCount > 0 && result.successCount == 0) SubSyncState.failed.value = true
+                    else if (result.successCount > 0) SubSyncState.failed.value = false
                     when {
                         result.successCount + result.failureCount + result.skipCount == 0 ->
                             toast(R.string.title_update_subscription_no_subscription)
@@ -696,6 +698,7 @@ class MainViewModel(
                     throw cancelled
                 } catch (e: Exception) {
                     LogUtil.e(AppConfig.TAG, "Subscription update failed", e)
+                    SubSyncState.failed.value = true
                     toastError(R.string.toast_failure)
                 }
             }
@@ -1190,4 +1193,9 @@ class MainViewModel(
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
+}
+
+/** True when the last subscription update failed; the connect button is blocked until one succeeds. */
+object SubSyncState {
+    val failed = kotlinx.coroutines.flow.MutableStateFlow(false)
 }

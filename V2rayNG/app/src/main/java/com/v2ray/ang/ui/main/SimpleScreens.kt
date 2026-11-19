@@ -55,6 +55,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -366,12 +367,15 @@ internal fun SimpleHomeScreen(
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(30_000L); nowMs = System.currentTimeMillis() } }
     val ended = info != null && (info.expired || (info.expireMillis?.let { it <= nowMs } == true) || (info.totalBytes > 0L && info.usedBytes >= info.totalBytes))
+    val syncFailed by SubSyncState.failed.collectAsState()
+    var showSyncFail by remember { mutableStateOf(false) }
+    var showModePick by remember { mutableStateOf(false) }
     var showEnded by rememberSaveable { mutableStateOf(false) }
     // Shown when the subscription ends; removed by itself once it is renewed (ended turns false)
     LaunchedEffect(ended) { showEnded = ended }
     androidx.activity.compose.BackHandler(enabled = tabIndex != 0) { tabIndex = 0 }
-    // the subscription info is refreshed once a day while the app is open
-    LaunchedEffect(Unit) { while (true) { onUpdate(); kotlinx.coroutines.delay(15L * 60 * 1000) } }
+    // the subscription info is refreshed every 8 hours while the app is open
+    LaunchedEffect(Unit) { while (true) { onUpdate(); kotlinx.coroutines.delay(8L * 60 * 60 * 1000) } }
     val drawerState = androidx.compose.material3.rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -433,7 +437,14 @@ internal fun SimpleHomeScreen(
                     info = info,
                     onToggle = {
                         // Ended and not renewed: show the popup again, never connect
-                        if (ended && !isRunning) showEnded = true else onToggle()
+                        if (ended && !isRunning) showEnded = true
+                        else if (syncFailed && !isRunning) { showSyncFail = true; onUpdate() }
+                        else if (!isRunning && !isStarting) {
+                            if (com.v2ray.ang.core.ShieldBridgeRanker.lastGood() == null) {
+                                MmkvManager.encodeSettings("pref_bridge_full_test", true); onToggle()
+                            } else showModePick = true
+                        }
+                        else onToggle()
                     },
                     onOpenServers = { tabIndex = HomeTab.SERVERS.ordinal },
                 )
@@ -454,6 +465,35 @@ internal fun SimpleHomeScreen(
     }
     }
 
+    if (showSyncFail) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showSyncFail = false },
+            title = { Text(if (isPersian) "به‌روزرسانی اشتراک ناموفق بود" else "Subscription update failed") },
+            text = { Text(if (isPersian) "لطفاً از اتصال اینترنت خود مطمئن شوید، سپس نرم‌افزار را کامل ببندید و مجدداً وارد شوید." else "Please make sure your internet connection works, then fully close the app and open it again.") },
+            confirmButton = { TextButton(onClick = { showSyncFail = false }) { Text(if (isPersian) "باشه" else "OK") } },
+        )
+    }
+    if (showModePick) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showModePick = false },
+            title = { Text(if (isPersian) "روش اتصال" else "Connection mode") },
+            text = { Text(if (isPersian) "اتصال سریع با آخرین Bridge موفق، یا تست کامل همه Bridgeها و انتخاب بهترین؟ تست کامل زمان بیشتری می‌برد." else "Quick connect with the last bridge that worked, or test every bridge and pick the best? Full test takes longer.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showModePick = false
+                    com.v2ray.ang.handler.MmkvManager.encodeSettings("pref_bridge_full_test", true)
+                    onToggle()
+                }) { Text(if (isPersian) "تست کامل و بهترین Bridge" else "Full test") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showModePick = false
+                    com.v2ray.ang.handler.MmkvManager.encodeSettings("pref_bridge_full_test", false)
+                    onToggle()
+                }) { Text(if (isPersian) "اتصال سریع" else "Quick connect") }
+            },
+        )
+    }
     if (showEnded && ended) {
         EndedDialog(isPersian = isPersian, onClose = { showEnded = false; onUpdate() }, onBuy = {
             onUpdate()
@@ -1073,7 +1113,7 @@ private fun MenuTab(
                         }
                         wtBusy = false
                         wtMsg = if (n > 0) {
-                            if (isPersian) "$n بریج به‌روز شد. برای اعمال، دوباره وصل شوید." else "$n bridges updated. Reconnect to apply."
+                            if (isPersian) "$n Bridge به‌روز شد. برای اعمال، دوباره وصل شوید." else "$n bridges updated. Reconnect to apply."
                         } else {
                             if (isPersian) "به‌روزرسانی ناموفق بود؛ لیست قبلی حفظ شد." else "Update failed; the previous list is kept."
                         }
@@ -1085,7 +1125,7 @@ private fun MenuTab(
             Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
                 Text(
                     text = if (wtBusy) (if (isPersian) "در حال به‌روزرسانی…" else "Updating…")
-                    else if (isPersian) "به‌روزرسانی وب‌تانل (Bridge)" else "Update WebTunnel bridges",
+                    else if (isPersian) "به‌روزرسانی Bridge" else "Update bridges",
                     color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                 )
                 wtMsg?.let { Text(text = it, color = c.subText, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp)) }

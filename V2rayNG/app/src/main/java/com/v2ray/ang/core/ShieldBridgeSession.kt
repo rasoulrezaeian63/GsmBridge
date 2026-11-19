@@ -112,6 +112,37 @@ internal class ShieldBridgeSession(
         }
     }
 
+    /** Full-test mode: time a ~256 KB download through Tor; failure costs a fixed penalty so slow paths rank last. */
+    private fun downloadMs(): Long {
+        val socket = Socket(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort)))
+        probe = socket
+        val began = System.nanoTime()
+        return try {
+            socket.soTimeout = 12_000
+            socket.connect(InetSocketAddress.createUnresolved("speed.cloudflare.com", 443), 12_000)
+            ((SSLSocketFactory.getDefault() as SSLSocketFactory)
+                .createSocket(socket, "speed.cloudflare.com", 443, true) as SSLSocket).use { tls ->
+                tls.sslParameters = tls.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
+                tls.soTimeout = 12_000
+                tls.startHandshake()
+                tls.getOutputStream().apply {
+                    write("GET /__down?bytes=262144 HTTP/1.1\r\nHost: speed.cloudflare.com\r\nConnection: close\r\n\r\n".toByteArray(Charsets.US_ASCII))
+                    flush()
+                }
+                val buf = ByteArray(16384)
+                var total = 0L
+                val input = tls.getInputStream()
+                while (true) { val n = input.read(buf); if (n < 0) break; total += n }
+                if (total >= 200_000) (System.nanoTime() - began) / 1_000_000 else 20_000L
+            }
+        } catch (_: Exception) {
+            20_000L
+        } finally {
+            runCatching { socket.close() }
+            probe = null
+        }
+    }
+
     private fun measure(s: ShieldTorControl.Session, bridge: String) {
         if (!active() || !sameNetwork() || !s.usesOnly(bridge)) return
         val values = mutableListOf<Long>()
@@ -160,8 +191,10 @@ internal class ShieldBridgeSession(
             }
             // Confirm that no old/other guard survived a pre-bootstrap switch before assigning this path observation.
             if (active() && sameNetwork() && values.size >= 2 && s.usesOnly(bridge)) {
-                val median = values.sorted()[values.size / 2]
+                var median = values.sorted()[values.size / 2]
+                if (ShieldBridgeRanker.fullTest()) median += downloadMs()
                 ShieldBridgeRanker.quality.record(scope, bridge, median)
+                com.v2ray.ang.handler.MmkvManager.encodeSettings(ShieldBridgeRanker.PREF_LAST_GOOD, bridge)
                 LogUtil.w(AppConfig.TAG, "ShieldTor: HTTPS path observation ${median}ms (${values.size}/3 samples)")
             }
         } finally {

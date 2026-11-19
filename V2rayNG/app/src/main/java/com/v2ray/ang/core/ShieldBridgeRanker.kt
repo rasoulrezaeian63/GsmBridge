@@ -20,22 +20,34 @@ internal object ShieldBridgeRanker {
     private const val TIMEOUT_MS = 3000
     private const val SCAN_SECONDS = 8L
     private const val MAX_PROBES = 48
+    const val PREF_FULL_TEST = "pref_bridge_full_test"
+
+    const val PREF_LAST_GOOD = "pref_bridge_last_good"
+
+    fun lastGood(): String? = com.v2ray.ang.handler.MmkvManager.decodeSettingsString(PREF_LAST_GOOD)?.takeIf { it.isNotBlank() }
+
+    /** The first run (no bridge ever worked) always does the full test. */
+    fun fullTest(): Boolean = lastGood() == null || com.v2ray.ang.handler.MmkvManager.decodeSettingsBool(PREF_FULL_TEST, false)
 
     val quality = ShieldBridgeQuality()
 
     fun pick(all: List<String>, count: Int, qualityScope: String? = null): List<String> {
         if (count <= 0 || all.isEmpty()) return emptyList()
         val candidates = quality.order(qualityScope, all.distinct().shuffled())
+        if (!fullTest()) {
+            lastGood()?.takeIf { it in all }?.let { return select(candidates, listOf(it), count) }
+        }
         val sockets = ConcurrentHashMap.newKeySet<Socket>()
         val stopped = AtomicBoolean(false)
-        val pool = Executors.newFixedThreadPool(8) { task ->
+        val full = fullTest()
+        val pool = Executors.newFixedThreadPool(if (full) 16 else 8) { task ->
             Thread(task, "shield-webtunnel-probe").apply { isDaemon = true }
         }
         return try {
-            val tasks = candidates.take(MAX_PROBES).map { line ->
+            val tasks = candidates.take(if (full) candidates.size else MAX_PROBES).map { line ->
                 Callable { line to connectMs(line, sockets, stopped) }
             }
-            val results = pool.invokeAll(tasks, SCAN_SECONDS, TimeUnit.SECONDS)
+            val results = pool.invokeAll(tasks, if (full) 15L else SCAN_SECONDS, TimeUnit.SECONDS)
                 .mapNotNull { f -> if (f.isCancelled) null else runCatching { f.get() }.getOrNull() }
             val ok = results.filter { it.second != null }.sortedBy { it.second }.map { it.first }
             LogUtil.w(AppConfig.TAG, "ShieldTor: WebTunnel upgrades ${ok.size}/${tasks.size}")
