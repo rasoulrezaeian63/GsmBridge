@@ -72,6 +72,7 @@ internal class ShieldBridgeSession(
                 val progress = s.bootstrapProgress() ?: return // Unknown state must never trigger a switch.
                 if (progress == 100 || alreadyReady()) {
                     onReady()
+                    runCatching { if (s.usesOnly(candidates[attempt])) com.v2ray.ang.handler.MmkvManager.encodeSettings(ShieldBridgeRanker.PREF_LAST_GOOD, candidates[attempt]) }
                     ShieldTorControl.applyFastMiddles(s, ::active)
                     ShieldTorControl.verifyExit(s, wantedExit, ::active)
                     measure(s, candidates[attempt])

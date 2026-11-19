@@ -1708,6 +1708,7 @@ object AetherCoreManager {
         }
         val geo = installGeoIp(context, File(context.filesDir, "tor").apply { mkdirs() })
         val scope = if (geo != null) network?.key(exit) else null
+        torStep.value = if (ShieldBridgeRanker.fullTest()) "Testing all bridges…" else "Connecting with last working bridge…"
         val bridges = ShieldBridgeRanker.pick(WebtunnelBridges.LINES, ShieldBridgeQuality.MAX_ATTEMPTS, scope)
         if (session !== target || bridges.isEmpty()) {
             network?.close()
